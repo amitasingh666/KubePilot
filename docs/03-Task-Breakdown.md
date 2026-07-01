@@ -1,7 +1,13 @@
 # KubePilot — Phased Task Breakdown
 
-**Version:** 2.0 (revised — aligned to `02-Architecture.md` v2.0)
-**Companion to:** `01-PRD.md`, `02-Architecture.md`
+**Version:** 2.1 (cross-verified against `06-Tech-Stack.md` & `07-Database-Schema.md`)
+**Companion to:** `01-PRD.md`, `02-Architecture.md`, `06-Tech-Stack.md`, `07-Database-Schema.md`
+
+> **v2.1 fixes (schema/architecture cross-check):** Phase 0 base model now includes
+> `app_user` + `membership` (RBAC depends on it); Phase 1 now captures `workload_revision`
+> history from day 1 (required by the Phase 5 feedback loop), sets up Timescale
+> hypertables/continuous aggregates the engine reads, and establishes tenant isolation on the
+> time-series path (not just relational).
 **Approach:** Build the data pipeline first (agent → ingestion → storage), then the
 intelligence (recommendations + node-level cost), then the experience (dashboard/reports).
 Each phase ends with a demoable milestone.
@@ -22,7 +28,7 @@ Each phase ends with a demoable milestone.
 - [ ] TypeScript baseline: lint, format, tsconfig, CI (build + test).
 - [ ] Provision dev infra: Postgres + TimescaleDB extension, **two Redis instances** (queue w/ AOF + cache/sessions), object storage.
 - [ ] Define the **ingestion contract v2** (snapshot JSON schema) — usage (CPU p95 / mem MAX), inventory, **scheduling constraints, autoscaler objects, PDBs, DaemonSets, stability signals, GitOps annotations**; include the **idempotency key** and **agent_version**.
-- [ ] Base data model & migrations: `tenant`, `user`, `cluster` — with **Postgres Row-Level Security enabled from the first migration**.
+- [ ] Base data model & migrations: `tenant`, **`app_user`, `membership` (user↔tenant + role)**, `cluster` — with **Postgres Row-Level Security enabled from the first migration**. *(RBAC roles depend on `membership`; users are many-to-many with tenants.)*
 - [ ] Secrets management & config strategy (per environment).
 
 **Milestone:** Empty services build, deploy to dev, talk to the databases, and RLS blocks cross-tenant reads in a test.
@@ -41,6 +47,9 @@ Each phase ends with a demoable milestone.
 - [ ] Agent: scheduled push with buffering, retry/backoff, and **idempotency keys**.
 - [ ] **Ingestion API:** per-cluster token **+ mTLS + payload signature** verification → resolve tenant/cluster → enqueue; **per-cluster rate limit + per-tenant fairness quota**.
 - [ ] Queue + ingestion workers: **dedupe by idempotency key** → write workload usage (TSDB) + inventory/constraints/autoscalers (Postgres, RLS).
+- [ ] **Append `workload_revision` on every spec/replica change** — capture spec-change history from day 1 (the Phase 5 feedback loop and the ≥90% accuracy KPI depend on this history existing).
+- [ ] **TimescaleDB setup:** create usage hypertables + compression/retention policies + the `usage_workload_daily` **continuous aggregate** the Phase 2 engine reads (MAX preserved for memory safety).
+- [ ] **Enforce tenant isolation on the time-series (Timescale) path**, not only the relational tables — establish it here, where usage data first lands (Phase 6 only *verifies* it).
 - [ ] Cluster registration flow: create connection → issue **rotatable token** → emit `helm install` command; **token rotation endpoint**.
 - [ ] "Last seen / connection health" tracking per cluster.
 
