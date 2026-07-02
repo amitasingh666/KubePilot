@@ -27,7 +27,7 @@
 | Dashboard | **React + Vite + TanStack Query + shadcn/ui + Recharts** | Next.js (if SSR/SEO needed) |
 | Relational DB | **PostgreSQL 16 + RLS** (managed) | — |
 | Time-series | **TimescaleDB (Postgres ext.)** | ClickHouse (only at high cardinality) |
-| ORM / query | **Drizzle ORM** | Prisma |
+| ORM / query | **Prisma** (RLS via Client Extension) | Drizzle ORM |
 | Cache / sessions | **Redis** (separate instance from queue) | — |
 | Object storage | **S3-compatible** (AWS S3 / Cloudflare R2 / MinIO) | — |
 | Auth (users) | **OIDC via Auth0 / WorkOS / Keycloak** | Ory / Clerk |
@@ -173,10 +173,17 @@ in-repo bin-packing simulator.**
 - **Migrate to ClickHouse only** if per-tenant series counts outgrow Timescale — it's a
   deliberate later decision, not a day-1 dependency.
 
-**ORM — Pick: Drizzle ORM.**
-- **Why:** lightweight, SQL-first, excellent TypeScript inference, **first-class RLS support**,
-  tiny runtime — better fit than Prisma for an RLS-heavy multi-tenant app. Prisma is the
-  alternative if the team prefers its DX/migrations.
+**ORM — Pick: Prisma** (chosen for its schema/migration DX and team familiarity).
+- **RLS caveat:** Prisma has no native Row-Level Security integration (it uses pooled
+  connections and won't set a per-request session variable on its own). We keep DB-enforced
+  RLS by wrapping every query in a **Prisma Client Extension** that runs
+  `SELECT set_config('app.tenant_id', <uuid>, true)` inside the query's transaction — see
+  `packages/db/src/client.ts` (`forTenant()`). Runtime services connect as a **non-superuser
+  app role** so RLS is actually enforced; migrations/seed use the superuser.
+- **Timescale:** hypertables / continuous aggregates aren't expressible in `schema.prisma`,
+  so they live in **raw-SQL migrations** alongside Prisma Migrate (same as they would with any ORM).
+- **Alternative: Drizzle ORM** — lighter runtime and more first-class RLS ergonomics; revisit if
+  the Prisma RLS-extension plumbing becomes a burden.
 
 **Cache / sessions — Redis** (separate instance from the BullMQ queue).
 

@@ -1,0 +1,7 @@
+node_modules
+dist
+build
+.turbo
+**/generated
+pnpm-lock.yaml
+docs

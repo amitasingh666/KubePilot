@@ -1,0 +1,101 @@
+// KubePilot — Prisma schema (Phase 0 base model)
+// Only the T1 base tables land here: tenant, app_user, membership, cluster.
+// Later phases add inventory, usage (Timescale), recommendations, cost, etc.
+//
+// Tenant isolation is enforced by Postgres Row-Level Security, applied in a
+// separate raw-SQL migration (Prisma cannot express RLS policies in-schema).
+// See prisma/migrations/*_rls_and_extensions/migration.sql and src/client.ts.
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  // Superuser URL — used for migrate/generate/seed only (owns schema, bypasses RLS).
+  // Runtime services override this with APP_DATABASE_URL (non-superuser → RLS enforced).
+  url      = env("DATABASE_URL")
+}
+
+enum UserRole {
+  owner
+  admin
+  viewer
+  finops
+}
+
+enum ClusterStatus {
+  pending
+  connected
+  stale
+  disconnected
+  archived
+}
+
+model Tenant {
+  id          String    @id @default(uuid()) @db.Uuid
+  name        String
+  slug        String    @unique
+  dataRegion  String    @default("us") @map("data_region")
+  billingPlan String?   @map("billing_plan")
+  status      String    @default("active")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime? @updatedAt @map("updated_at")
+
+  memberships Membership[]
+  clusters    Cluster[]
+
+  @@map("tenant")
+}
+
+model AppUser {
+  id         String    @id @default(uuid()) @db.Uuid
+  email      String    @unique
+  name       String?
+  idpSubject String?   @map("idp_subject")
+  status     String    @default("active")
+  createdAt  DateTime  @default(now()) @map("created_at")
+  updatedAt  DateTime? @updatedAt @map("updated_at")
+
+  memberships Membership[]
+
+  @@map("app_user")
+}
+
+model Membership {
+  id        String   @id @default(uuid()) @db.Uuid
+  tenantId  String   @map("tenant_id") @db.Uuid
+  userId    String   @map("user_id") @db.Uuid
+  role      UserRole @default(viewer)
+  createdAt DateTime @default(now()) @map("created_at")
+
+  tenant Tenant  @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+  user   AppUser @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, userId])
+  @@index([userId])
+  @@map("membership")
+}
+
+model Cluster {
+  id               String        @id @default(uuid()) @db.Uuid
+  tenantId         String        @map("tenant_id") @db.Uuid
+  name             String
+  provider         String?
+  region           String?
+  distribution     String?
+  autoscaler       String?
+  prometheusFlavor String?       @map("prometheus_flavor")
+  gitops           String?
+  status           ClusterStatus @default(pending)
+  lastSeenAt       DateTime?     @map("last_seen_at")
+  agentVersion     String?       @map("agent_version")
+  createdAt        DateTime      @default(now()) @map("created_at")
+  updatedAt        DateTime?     @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@unique([tenantId, name])
+  @@index([tenantId, status])
+  @@map("cluster")
+}
