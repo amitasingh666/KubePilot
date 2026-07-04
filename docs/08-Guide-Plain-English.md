@@ -5,6 +5,12 @@
 **Who this is for:** anyone who wants to understand KubePilot without knowing Kubernetes or
 databases. No jargon assumed — every term is explained the first time it appears.
 
+> **⚠️ Update (2026-07):** For now, KubePilot keeps each customer's data separate using
+> **application-layer checks** — the code filters every query by the customer. A stronger
+> database-level guarantee (Row-Level Security) is planned for production but not built yet.
+> Wherever this guide says "the database itself refuses" cross-tenant reads, read it as
+> "planned for production" — today the *application code* enforces it.
+
 ---
 
 ## 1. What KubePilot does, in one paragraph

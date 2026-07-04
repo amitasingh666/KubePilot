@@ -4,6 +4,13 @@
 **Companion to:** `01-PRD.md`
 **Stack decisions:** SaaS multi-tenant · Node.js/TypeScript · reuse customer Prometheus
 
+> **⚠️ Decision update (2026-07) — RLS deferred.** Tenant isolation is now enforced by
+> **application-layer scoping** (every query filters by `tenant_id` in the data-access layer),
+> not Postgres Row-Level Security. **RLS is deferred as a recommended production-hardening step
+> and is not implemented.** Wherever this doc describes RLS policies, `FORCE ROW LEVEL SECURITY`,
+> the `kubepilot_app` role's RLS enforcement, `forTenant()` / `SET LOCAL app.tenant_id`, or
+> `app_current_tenant()`, read them as the *future/production* design — not current behavior.
+
 > **What changed in v2.0:** This revision resolves the critical correctness, safety, and
 > security issues found in the v1.0 review. The headline changes are: (1) savings are now
 > modeled at the **node layer** via bin-packing simulation, not per-pod request deltas;
@@ -17,7 +24,7 @@
 
 ## 1. Architecture Goals
 - **Secure by default:** agent is outbound-only; KubePilot never gets inbound/write access to customer clusters in v1.
-- **Multi-tenant isolation:** every record scoped by `tenant_id`; enforced by Postgres **Row-Level Security (RLS)**, not app-layer filtering alone.
+- **Multi-tenant isolation:** every record scoped by `tenant_id`; enforced by **application-layer scoping** in the data-access layer (RLS deferred as production hardening — see banner).
 - **Low customer footprint:** reuse existing Prometheus; ship a thin agent that throttles its own query load.
 - **Scalable ingestion & analysis:** handle hundreds of services per cluster, many clusters per tenant.
 - **Recommend-only, but truthful:** v1 produces patches it never applies — and only claims dollar savings it can defend at the node layer.

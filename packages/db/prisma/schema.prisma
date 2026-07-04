@@ -32,6 +32,16 @@ enum ClusterStatus {
   archived
 }
 
+enum WorkloadKind {
+  deployment
+  statefulset
+  daemonset
+  cronjob
+  job
+  replicaset
+  rollout
+}
+
 model Tenant {
   id          String    @id @default(uuid()) @db.Uuid
   name        String
@@ -92,10 +102,223 @@ model Cluster {
   agentVersion     String?       @map("agent_version")
   createdAt        DateTime      @default(now()) @map("created_at")
   updatedAt        DateTime?     @updatedAt @map("updated_at")
+  nodes              Node[]
+  workloads          Workload[]
+  autoscalers        Autoscaler[]
+  pdbs               PodDisruptionBudget[]
+  pvcs               Pvc[]
+  services           K8sService[]
+  ingestionSnapshots IngestionSnapshot[]
 
   tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
 
   @@unique([tenantId, name])
   @@index([tenantId, status])
   @@map("cluster")
+}
+
+model Node {
+  id                  String   @id @default(uuid()) @db.Uuid
+  tenantId            String   @map("tenant_id") @db.Uuid
+  clusterId           String   @map("cluster_id") @db.Uuid
+  name                String
+  nodeGroup           String?  @map("node_group")
+  instanceType        String?  @map("instance_type")
+  capacityProvider    String?  @map("capacity_provider")
+  cpuCapacityM        Int?     @map("cpu_capacity_m")
+  memCapacityBytes    BigInt?  @map("mem_capacity_bytes")
+  cpuAllocatableM     Int?     @map("cpu_allocatable_m")
+  memAllocatableBytes BigInt?  @map("mem_allocatable_bytes")
+  taints              Json?
+  labels              Json?
+  status              String?
+  lastSeenAt          DateTime @default(now()) @map("last_seen_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, name])
+  @@index([tenantId])
+  @@map("node")
+}
+
+model Workload {
+  id                String            @id @default(uuid()) @db.Uuid
+  tenantId          String            @map("tenant_id") @db.Uuid
+  clusterId         String            @map("cluster_id") @db.Uuid
+  namespace         String
+  name              String
+  kind              WorkloadKind
+  replicas          Int?
+  cpuRequestM       Int?              @map("cpu_request_m")
+  memRequestBytes   BigInt?           @map("mem_request_bytes")
+  cpuLimitM         Int?              @map("cpu_limit_m")
+  memLimitBytes     BigInt?           @map("mem_limit_bytes")
+  qosClass          String?           @map("qos_class")
+  priorityClass     String?           @map("priority_class")
+  managedBy         String            @default("none") @map("managed_by")
+  gitopsOwned       Boolean           @default(false)  @map("gitops_owned")
+  gitopsSource      Json?             @map("gitops_source")
+  labels            Json?
+  specHash          String?           @map("spec_hash")
+  lastSeenAt        DateTime          @default(now()) @map("last_seen_at")
+  archivedAt        DateTime?         @map("archived_at")
+  containers ContainerSpec[]
+  revisions  WorkloadRevision[]
+  constraint SchedulingConstraint?
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, namespace, name, kind])
+  @@index([clusterId, namespace])
+  @@index([managedBy])
+  @@map("workload")
+}
+
+model ContainerSpec {
+  id              String  @id @default(uuid()) @db.Uuid
+  tenantId        String  @map("tenant_id") @db.Uuid
+  workloadId      String  @map("workload_id") @db.Uuid
+  container       String
+  cpuRequestM     Int?    @map("cpu_request_m")
+  cpuLimitM       Int?    @map("cpu_limit_m")
+  memRequestBytes BigInt? @map("mem_request_bytes")
+  memLimitBytes   BigInt? @map("mem_limit_bytes")
+
+  workload Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+
+  @@unique([workloadId, container])
+  @@index([tenantId])
+  @@map("container_spec")
+}
+
+
+model WorkloadRevision {
+  id              String  @id @default(uuid()) @db.Uuid
+  tenantId        String  @map("tenant_id") @db.Uuid
+  workloadId      String  @map("workload_id") @db.Uuid
+  observedAt      DateTime @default(now()) @map("observed_at")
+  replicas        Int?
+  cpuRequestM     Int?    @map("cpu_request_m")
+  cpuLimitM       Int?    @map("cpu_limit_m")
+  memRequestBytes BigInt? @map("mem_request_bytes")
+  memLimitBytes   BigInt? @map("mem_limit_bytes")
+  specHash        String? @map("spec_hash")
+
+  workload Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+
+  @@index([workloadId, observedAt]) 
+  @@index([tenantId])
+  @@map("workload_revision")
+}
+
+model SchedulingConstraint {
+  id             String  @id @default(uuid()) @db.Uuid
+  tenantId       String  @map("tenant_id") @db.Uuid
+  workloadId     String  @unique @map("workload_id") @db.Uuid  // @unique → one-to-one
+  nodeSelector   Json?   @map("node_selector")
+  affinity       Json?
+  antiAffinity   Json?   @map("anti_affinity")
+  tolerations    Json?
+  topologySpread Json?   @map("topology_spread")
+  pvcAffinity    Json?   @map("pvc_affinity")
+
+  workload Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("scheduling_constraint")
+}
+
+model IngestionSnapshot {
+  id             String    @id @default(uuid()) @db.Uuid
+  tenantId       String    @map("tenant_id") @db.Uuid
+  clusterId      String    @map("cluster_id") @db.Uuid
+  idempotencyKey String    @map("idempotency_key")
+  agentVersion   String    @map("agent_version")
+  payloadKind    String    @map("payload_kind")
+  status         String    @default("received")
+  receivedAt     DateTime  @default(now()) @map("received_at")
+  processedAt    DateTime? @map("processed_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, idempotencyKey])   // the dedupe key
+  @@index([tenantId])
+  @@map("ingestion_snapshot")
+}
+
+
+model Autoscaler {
+  id          String   @id @default(uuid()) @db.Uuid
+  tenantId    String   @map("tenant_id") @db.Uuid
+  clusterId   String   @map("cluster_id") @db.Uuid
+  workloadId  String?  @map("workload_id") @db.Uuid
+  kind        String // hpa | vpa | keda
+  minReplicas Int?     @map("min_replicas")
+  maxReplicas Int?     @map("max_replicas")
+  metric      String?
+  target      Json?    @map("target_json")
+  updateMode  String?  @map("update_mode")
+  spec        Json?    @map("spec_json")
+  lastSeenAt  DateTime @default(now()) @map("last_seen_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@index([clusterId])
+  @@index([tenantId])
+  @@map("autoscaler")
+}
+
+model PodDisruptionBudget {
+  id             String   @id @default(uuid()) @db.Uuid
+  tenantId       String   @map("tenant_id") @db.Uuid
+  clusterId      String   @map("cluster_id") @db.Uuid
+  namespace      String
+  name           String
+  minAvailable   String?  @map("min_available")
+  maxUnavailable String?  @map("max_unavailable")
+  selector       Json?    @map("selector_json")
+  lastSeenAt     DateTime @default(now()) @map("last_seen_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, namespace, name])
+  @@index([tenantId])
+  @@map("pod_disruption_budget")
+}
+
+model Pvc {
+  id            String   @id @default(uuid()) @db.Uuid
+  tenantId      String   @map("tenant_id") @db.Uuid
+  clusterId     String   @map("cluster_id") @db.Uuid
+  namespace     String
+  name          String
+  storageClass  String?  @map("storage_class")
+  capacityBytes BigInt?  @map("capacity_bytes")
+  volumeType    String?  @map("volume_type")
+  bound         Boolean?
+  mounted       Boolean?
+  lastSeenAt    DateTime @default(now()) @map("last_seen_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, namespace, name])
+  @@index([tenantId])
+  @@map("pvc")
+}
+
+model K8sService {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  clusterId  String   @map("cluster_id") @db.Uuid
+  namespace  String
+  name       String
+  type       String?
+  hasTraffic Boolean? @map("has_traffic")
+  lastSeenAt DateTime @default(now()) @map("last_seen_at")
+
+  cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
+
+  @@unique([clusterId, namespace, name])
+  @@index([tenantId])
+  @@map("k8s_service")
 }

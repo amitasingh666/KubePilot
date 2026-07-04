@@ -2,9 +2,17 @@
 
 **Version:** 1.0
 **Companion to:** `02-Architecture.md` (v2.0), `06-Tech-Stack.md`
-**Engines:** PostgreSQL 16 (relational, **RLS**) + TimescaleDB extension (usage time-series)
+**Engines:** PostgreSQL 16 (relational; app-layer tenant scoping · RLS deferred) + TimescaleDB extension (usage time-series)
 **Scope:** v1 tables **plus** forward-compatible structures for every PRD future-scope item
 (ML recs, forecasting, budgets/alerts, incident RCA, AI assistant, write-back with approval).
+
+> **⚠️ Decision update (2026-07) — RLS deferred.** This project uses **application-layer tenant
+> scoping** (every query filters by `tenant_id` in the data-access layer) as its tenant-isolation
+> mechanism. **Postgres Row-Level Security (RLS) is deferred as a recommended production-hardening
+> step and is not implemented.** §14 and every mention of RLS policies, `FORCE ROW LEVEL
+> SECURITY`, `forTenant()` / `SET LOCAL app.tenant_id`, or `app_current_tenant()` describe the
+> *future/production* design, not current behavior. The `tenant_id` column on every table stays —
+> app-layer scoping relies on it.
 
 > **How this doc is organized:** §1 design principles → §2 conventions → §3–§12 schema by
 > domain (DDL + notes) → §13 TimescaleDB specifics → §14 RLS → §15 indexing → §16 future-scope
@@ -624,9 +632,19 @@ aggregate.
 
 ---
 
-## 14. Row-Level Security (RLS)
+## 14. Tenant isolation
+
+**Current (v1): application-layer scoping.** Every table carries `tenant_id`, and the
+data-access layer adds `tenant_id = <current tenant>` to every read and sets it on every write
+(via a shared scoped-client / repository helper). This is the isolation boundary today.
+
+**Deferred (production hardening): Row-Level Security.** The RLS design below is **recommended
+for production but not implemented** — it makes the *database* enforce isolation so a forgotten
+`WHERE tenant_id` in app code can't leak data. Kept here as the target hardening step.
 
 ```sql
+-- DEFERRED / production-hardening pattern (NOT applied in v1):
+-- Pattern applied to EVERY tenant-owned table.
 -- Pattern applied to EVERY tenant-owned table.
 alter table workload enable row level security;
 alter table workload force row level security;         -- applies to table owner too

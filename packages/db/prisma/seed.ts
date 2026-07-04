@@ -2,9 +2,8 @@ import { PrismaClient } from "@prisma/client";
 
 /**
  * Seed two tenants with users, memberships, and clusters.
- * Runs as the SUPERUSER (DATABASE_URL) so it bypasses RLS while inserting
- * cross-tenant data. The RLS guarantees are then checked by verify-rls.ts,
- * which connects as the app role.
+ * Runs as the SUPERUSER (DATABASE_URL). Tenant isolation is enforced at the
+ * application layer (queries filter by tenantId); there is no DB-level RLS.
  */
 const prisma = new PrismaClient();
 

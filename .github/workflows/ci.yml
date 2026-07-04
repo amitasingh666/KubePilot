@@ -59,6 +59,3 @@ jobs:
 
       - name: Seed demo tenants
         run: pnpm db:seed
-
-      - name: Verify tenant isolation (RLS)
-        run: pnpm db:verify-rls

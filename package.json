@@ -19,7 +19,6 @@
     "db:migrate": "pnpm --filter @kubepilot/db migrate",
     "db:migrate:dev": "pnpm --filter @kubepilot/db migrate:dev",
     "db:seed": "pnpm --filter @kubepilot/db seed",
-    "db:verify-rls": "pnpm --filter @kubepilot/db verify-rls",
     "setup": "pnpm install && pnpm infra:up && pnpm db:generate && pnpm db:migrate && pnpm db:seed"
   },
   "devDependencies": {

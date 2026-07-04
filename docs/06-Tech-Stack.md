@@ -5,6 +5,11 @@
 **Guiding principles:** lightweight · easy to integrate · one language where sensible
 (TypeScript) · managed services over self-hosted · best-fit tool per component.
 
+> **⚠️ Decision update (2026-07) — RLS deferred.** Tenant isolation is now enforced by
+> **application-layer scoping** (queries filter by `tenant_id`), not Postgres Row-Level Security.
+> RLS is deferred as a recommended production-hardening step. Read RLS mentions below as the
+> *future/production* design, not current behavior.
+
 > **How to read this:** each component lists a **Pick** (what to build with), **Why**, and a
 > **Lightweight alternative** for when you want to move even faster or cut a dependency. The
 > default posture is *boring, managed, TypeScript-first* — reach for a different language only
@@ -25,9 +30,9 @@
 | Cost engine | **Node/TS + pricing/billing importers** | — |
 | Public API | **Fastify + tRPC (or REST + OpenAPI)** | GraphQL (only if client demands) |
 | Dashboard | **React + Vite + TanStack Query + shadcn/ui + Recharts** | Next.js (if SSR/SEO needed) |
-| Relational DB | **PostgreSQL 16 + RLS** (managed) | — |
+| Relational DB | **PostgreSQL 16** (managed); app-layer tenant scoping, RLS deferred | — |
 | Time-series | **TimescaleDB (Postgres ext.)** | ClickHouse (only at high cardinality) |
-| ORM / query | **Prisma** (RLS via Client Extension) | Drizzle ORM |
+| ORM / query | **Prisma** (app-layer tenant scoping) | Drizzle ORM |
 | Cache / sessions | **Redis** (separate instance from queue) | — |
 | Object storage | **S3-compatible** (AWS S3 / Cloudflare R2 / MinIO) | — |
 | Auth (users) | **OIDC via Auth0 / WorkOS / Keycloak** | Ory / Clerk |
@@ -162,10 +167,11 @@ in-repo bin-packing simulator.**
 
 ## 9. Databases
 
-**Relational — Pick: PostgreSQL 16 (managed: RDS / Cloud SQL / Neon), RLS enabled.**
-- One engine to run; **Row-Level Security** enforces tenant isolation at the DB, not just app
-  code. Holds tenants, users, clusters, inventory, constraints, autoscalers, recommendations,
-  plans, cost configs, audit.
+**Relational — Pick: PostgreSQL 16 (managed: RDS / Cloud SQL / Neon).**
+- One engine to run. Holds tenants, users, clusters, inventory, constraints, autoscalers,
+  recommendations, plans, cost configs, audit.
+- **Tenant isolation:** application-layer scoping (every query filters by `tenant_id`).
+  **Row-Level Security is deferred** as a production-hardening step (see the banner at the top).
 
 **Time-series — Pick: TimescaleDB (Postgres extension).**
 - **Why:** keeps v1 on **one database engine** (Postgres skills, backups, tooling). Aggregate
@@ -174,16 +180,16 @@ in-repo bin-packing simulator.**
   deliberate later decision, not a day-1 dependency.
 
 **ORM — Pick: Prisma** (chosen for its schema/migration DX and team familiarity).
-- **RLS caveat:** Prisma has no native Row-Level Security integration (it uses pooled
-  connections and won't set a per-request session variable on its own). We keep DB-enforced
-  RLS by wrapping every query in a **Prisma Client Extension** that runs
-  `SELECT set_config('app.tenant_id', <uuid>, true)` inside the query's transaction — see
-  `packages/db/src/client.ts` (`forTenant()`). Runtime services connect as a **non-superuser
-  app role** so RLS is actually enforced; migrations/seed use the superuser.
+- **Tenant scoping:** every query filters by `tenant_id` in the data-access layer (a shared
+  scoped-client / repository helper), so no query forgets it. Runtime services connect as the
+  non-superuser `kubepilot_app` role; migrations/seed use the superuser.
 - **Timescale:** hypertables / continuous aggregates aren't expressible in `schema.prisma`,
   so they live in **raw-SQL migrations** alongside Prisma Migrate (same as they would with any ORM).
-- **Alternative: Drizzle ORM** — lighter runtime and more first-class RLS ergonomics; revisit if
-  the Prisma RLS-extension plumbing becomes a burden.
+- **Deferred — RLS:** if/when we harden for production, Prisma can enforce Postgres RLS via a
+  **Client Extension** that runs `SELECT set_config('app.tenant_id', <uuid>, true)` per
+  transaction (this makes the DB enforce isolation even if app code forgets a filter). Not
+  implemented in v1.
+- **Alternative: Drizzle ORM** — lighter runtime and more first-class RLS ergonomics.
 
 **Cache / sessions — Redis** (separate instance from the BullMQ queue).
 

@@ -18,7 +18,6 @@
     "migrate": "dotenv -e ../../.env -- prisma migrate deploy",
     "migrate:dev": "dotenv -e ../../.env -- prisma migrate dev",
     "seed": "dotenv -e ../../.env -- tsx prisma/seed.ts",
-    "verify-rls": "dotenv -e ../../.env -- tsx src/verify-rls.ts",
     "lint": "echo \"(lint placeholder)\"",
     "test": "echo \"(no tests yet)\""
   },

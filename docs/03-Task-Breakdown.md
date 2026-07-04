@@ -3,14 +3,20 @@
 **Version:** 2.1 (cross-verified against `06-Tech-Stack.md` & `07-Database-Schema.md`)
 **Companion to:** `01-PRD.md`, `02-Architecture.md`, `06-Tech-Stack.md`, `07-Database-Schema.md`
 
+> **⚠️ Decision update (2026-07) — RLS deferred.** Tenant isolation is enforced by
+> **application-layer scoping** (queries filter by `tenant_id`), not Postgres RLS. RLS is a
+> deferred production-hardening step. Where tasks/milestones below mention RLS or
+> "cross-tenant isolation," read isolation as **app-layer** for now (the `tenant_id` columns
+> remain; only the DB-level RLS enforcement is deferred).
+
 > **v2.1 fixes (schema/architecture cross-check):** Phase 0 base model now includes
 > `app_user` + `membership` (RBAC depends on it); Phase 1 now captures `workload_revision`
 > history from day 1 (required by the Phase 5 feedback loop), sets up Timescale
 > hypertables/continuous aggregates the engine reads, and establishes tenant isolation on the
 > time-series path (not just relational).
-**Approach:** Build the data pipeline first (agent → ingestion → storage), then the
-intelligence (recommendations + node-level cost), then the experience (dashboard/reports).
-Each phase ends with a demoable milestone.
+> **Approach:** Build the data pipeline first (agent → ingestion → storage), then the
+> intelligence (recommendations + node-level cost), then the experience (dashboard/reports).
+> Each phase ends with a demoable milestone.
 
 > **What changed in v2.0:** Security essentials (RLS, rotatable token + mTLS, signed payloads,
 > PodSpec stripping) are pulled **forward** into the phases that create the relevant surface,
@@ -22,20 +28,22 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 0 — Foundations & Setup
+
 **Goal:** Repos, environments, and contracts in place so all later work plugs in cleanly.
 
-- [ ] Monorepo (or multi-repo) scaffold: `agent`, `backend`, `frontend`, `helm`, `infra`.
-- [ ] TypeScript baseline: lint, format, tsconfig, CI (build + test).
-- [ ] Provision dev infra: Postgres + TimescaleDB extension, **two Redis instances** (queue w/ AOF + cache/sessions), object storage.
-- [ ] Define the **ingestion contract v2** (snapshot JSON schema) — usage (CPU p95 / mem MAX), inventory, **scheduling constraints, autoscaler objects, PDBs, DaemonSets, stability signals, GitOps annotations**; include the **idempotency key** and **agent_version**.
-- [ ] Base data model & migrations: `tenant`, **`app_user`, `membership` (user↔tenant + role)**, `cluster` — with **Postgres Row-Level Security enabled from the first migration**. *(RBAC roles depend on `membership`; users are many-to-many with tenants.)*
-- [ ] Secrets management & config strategy (per environment).
+- [x] Monorepo (or multi-repo) scaffold: `agent`, `backend`, `frontend`, `helm`, `infra`.
+- [x] TypeScript baseline: lint, format, tsconfig, CI (build + test).
+- [x] Provision dev infra: Postgres + TimescaleDB extension, **two Redis instances** (queue w/ AOF + cache/sessions), object storage.
+- [x] Define the **ingestion contract v2** (snapshot JSON schema) — usage (CPU p95 / mem MAX), inventory, **scheduling constraints, autoscaler objects, PDBs, DaemonSets, stability signals, GitOps annotations**; include the **idempotency key** and **agent_version**.
+- [x] Base data model & migrations: `tenant`, `**app_user`, `membership` (user↔tenant + role)**, `cluster` — with **Postgres Row-Level Security enabled from the first migration**. *(RBAC roles depend on `membership`; users are many-to-many with tenants.)*
+- [x] Secrets management & config strategy (per environment).
 
 **Milestone:** Empty services build, deploy to dev, talk to the databases, and RLS blocks cross-tenant reads in a test.
 
 ---
 
 ## Phase 1 — Cluster Integration & Secure Metrics Pipeline
+
 **Goal:** A real cluster connects securely and pushes metrics + topology that land in storage.
 
 - [ ] **Agent (Helm):** chart + read-only RBAC `ServiceAccount`.
@@ -58,6 +66,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 2 — Recommendation Engine (safe & autoscaler-aware)
+
 **Goal:** Turn stored data into trustworthy, prioritized, *non-destructive* recommendations.
 
 - [ ] **Per-tenant sharded** analysis jobs (not one global cron), at least daily, with fairness.
@@ -80,6 +89,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 3 — Cost Engine (node-level, effective pricing)
+
 **Goal:** Attach *defensible* dollars to every plan and aggregate cost.
 
 - [ ] **Effective pricing catalog**: ingest actual billing (start with one cloud — AWS CUR / GCP / Azure export) + per-tenant negotiated-rate overrides; model spot/Savings-Plans/CUD/RIs. Plus a **storage (per-GB-month) catalog**.
@@ -93,6 +103,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 4 — API & Dashboard
+
 **Goal:** Users can see cost, utilization, health, and act on recommendations.
 
 - [ ] Public API (REST/GraphQL), tenant-scoped authorization on every endpoint **backed by RLS**.
@@ -107,6 +118,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 5 — Reporting & Feedback Loop
+
 **Goal:** Shareable reports, and measurable recommendation accuracy.
 
 - [ ] Report generation by cluster / namespace / deployment.
@@ -119,6 +131,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Phase 6 — Hardening & Launch Readiness
+
 **Goal:** Production-grade scale and reliability (security essentials already shipped earlier).
 
 - [ ] Multi-tenant isolation **regression** tests (RLS on relational **and** time-series paths).
@@ -135,6 +148,7 @@ Each phase ends with a demoable milestone.
 ---
 
 ## Future Scope (tracked, not in v1)
+
 AI-powered recommendations · cost forecasting · incident RCA · predictive autoscaling ·
 AI Kubernetes assistant · **automatic optimization with approval workflow (write-back)**.
 The Phase 2 rule layer is intentionally pluggable so ML models can augment or replace rules
@@ -143,13 +157,19 @@ later; the bin-packing simulator and feedback loop become the safety + training 
 ---
 
 ## Dependency Order (critical path)
+
 ```
 Phase 0  →  Phase 1  →  Phase 2  →  Phase 3  →  Phase 4  →  Phase 5  →  Phase 6
 (setup +   (secure     (safe recs  (node-level (UI/API)    (reports +  (scale +
  RLS)       pipeline)   + binpack)  cost)                   feedback)   reliability)
 ```
+
 - Security essentials (RLS, token rotation, mTLS, signing, PodSpec stripping) ship **inside Phases 0–1**, not deferred.
 - The **bin-packing simulator (Phase 2)** is a hard dependency for both idle-node recs and node-level savings (Phase 3) — build it before either.
 - Phase 3 (cost) can begin once the optimization-plan record exists (late Phase 2).
 - Frontend scaffolding (early Phase 4) can start during Phase 2 against mock data.
+
 ```
+
+```
+
