@@ -30,7 +30,7 @@ services:
     # Durable: append-only file on, so at-least-once ingestion survives restarts.
     command: ["redis-server", "--appendonly", "yes"]
     ports:
-      - "6379:6379"
+      - "${REDIS_QUEUE_PORT:-6379}:6379"
     volumes:
       - redis_queue_data:/data
     healthcheck:
@@ -45,7 +45,7 @@ services:
     # Ephemeral cache/sessions: no persistence.
     command: ["redis-server", "--save", "", "--appendonly", "no"]
     ports:
-      - "6380:6379"
+      - "${REDIS_CACHE_PORT:-6380}:6379"
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s

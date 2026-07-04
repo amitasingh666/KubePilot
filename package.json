@@ -29,6 +29,9 @@
     "typescript": "^5.7.2"
   },
   "pnpm": {
-    "onlyBuiltDependencies": ["esbuild", "prisma", "@prisma/client", "@prisma/engines"]
+    "onlyBuiltDependencies": ["esbuild", "prisma", "@prisma/client", "@prisma/engines"],
+    "overrides": {
+      "ioredis": "^5.11.1"
+    }
   }
 }
