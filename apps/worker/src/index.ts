@@ -3,6 +3,7 @@ import { Redis } from "ioredis";
 import type { Snapshot } from "@kubepilot/contract";
 import { getRootClient, Prisma } from "@kubepilot/db";
 import { writeInventory } from "./writeInventory.js";
+import { writeUsage, writeEvents } from "./writeUsage.js";
 
 const redisUrl = process.env.REDIS_QUEUE_URL;
 if (!redisUrl) throw new Error("REDIS_QUEUE_URL is not set");
@@ -39,6 +40,8 @@ const worker = new Worker<IngestionJob>(
           },
         });
         await writeInventory(tx, tenantId, snapshot);
+        await writeUsage(tx, tenantId, snapshot);
+        await writeEvents(tx, tenantId, snapshot);
       });
       console.log(`▶️  processed ${snapshot.payloadKind} for cluster ${snapshot.clusterId}`);
     } catch (err) {

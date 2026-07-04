@@ -3,7 +3,7 @@ import { Prisma } from "@kubepilot/db";
 import type { Snapshot, ResourceQuantities } from "@kubepilot/contract";
 
 // Byte fields are BigInt in Postgres, but arrive as plain numbers over JSON.
-function toBig(n: number | null | undefined): bigint | null {
+export function toBig(n: number | null | undefined): bigint | null {
   return n == null ? null : BigInt(n);
 }
 
@@ -22,7 +22,7 @@ function hashSpec(replicas: number | null | undefined, r: ResourceQuantities): s
 
 // Prisma nullable Json fields don't accept a plain `null`. Use Prisma.DbNull
 // (SQL NULL) when the value is absent, otherwise pass the value through.
-function jsonOrNull(v: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
+export function jsonOrNull(v: unknown): Prisma.InputJsonValue | typeof Prisma.DbNull {
   return v == null ? Prisma.DbNull : (v as Prisma.InputJsonValue);
 }
 
@@ -70,7 +70,7 @@ export async function writeInventory(
     const r = w.resources;
     const key = { clusterId, namespace: w.namespace, name: w.name, kind: w.kind };
 
-    // D4: hash sizing fields, and read the PRIOR hash before the upsert
+    // hash sizing fields, and read the PRIOR hash before the upsert
     // overwrites it, so we can tell whether the spec actually changed.
     const specHash = hashSpec(w.replicas, r);
     const existing = await tx.workload.findUnique({

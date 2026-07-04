@@ -342,3 +342,52 @@ model AgentCredential {
   @@index([tenantId])
   @@map("agent_credential")
 }
+
+model UsageMetricWorkload {
+  tenantId    String   @map("tenant_id") @db.Uuid
+  clusterId   String   @map("cluster_id") @db.Uuid
+  workloadId  String   @map("workload_id") @db.Uuid
+  ts          DateTime @db.Timestamptz(3)          // window end; timezone-aware
+  windowSec   Int      @map("window_sec")
+  cpuP95M     Int?     @map("cpu_p95_m")
+  cpuAvgM     Int?     @map("cpu_avg_m")
+  memMaxBytes BigInt?  @map("mem_max_bytes")        // MAX — for OOM-safe sizing
+  memAvgBytes BigInt?  @map("mem_avg_bytes")
+  restarts    Int      @default(0)
+
+  @@id([workloadId, ts, windowSec])                 // composite PK incl. ts (Timescale requirement)
+  @@index([tenantId])
+  @@map("usage_metric_workload")
+}
+
+
+model UsageMetricNode {
+  tenantId         String @map("tenant_id") @db.Uuid
+  clusterId        String @map("cluster_id") @db.Uuid
+  nodeId           String @map("node_id") @db.Uuid
+  ts               DateTime @db.Timestamptz(3)  
+  windowSec        Int @map("window_sec")
+  cpuUsedM         Int? @map("cpu_used_m")
+  memUsedBytes     BigInt? @map("mem_used_bytes") 
+  cpuAllocPct      Float? @map("cpu_alloc_pct")
+  memAllocPct      Float? @map("mem_alloc_pct")
+
+  @@id([nodeId, ts, windowSec])
+  @@index([tenantId])
+  @@map("usage_metric_node")
+}
+
+model StabilityEvent {
+  id         String   @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  clusterId  String   @map("cluster_id") @db.Uuid
+  workloadId String?  @map("workload_id") @db.Uuid   // nullable: may not map to a workload
+  ts         DateTime @db.Timestamptz(3)
+  kind       String                                    // oomkill | restart | evicted | crashloop
+  detail     Json?
+
+  @@id([id, ts])                                        // surrogate id + ts (ts required by Timescale)
+  @@index([tenantId])
+  @@index([workloadId, ts])
+  @@map("stability_event")
+}
