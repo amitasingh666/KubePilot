@@ -1,0 +1,10 @@
+# Always install/build fresh inside the image
+**/node_modules
+**/dist
+**/.turbo
+.git
+.github
+*.log
+.env
+.env.*
+!.env.example

@@ -1,0 +1,29 @@
+# Container image. For local kind dev we build & `kind load` this tag.
+image:
+  repository: kubepilot-agent
+  tag: dev
+  pullPolicy: IfNotPresent
+
+# --- per-connection values (buildHelmInstallCommand injects clusterId/token/ingestionUrl) ---
+# The cluster connection id from the KubePilot dashboard.
+clusterId: ""
+# The kp_... agent token (stored in a Secret, never in plain env).
+token: ""
+# Where the agent pushes snapshots. In a real cluster this is the KubePilot SaaS URL.
+ingestionUrl: "https://ingest.kubepilot.example"
+
+# --- customer's in-cluster Prometheus (reused, not installed by us) ---
+prometheusUrl: "http://prometheus-server.monitoring.svc.cluster.local"
+
+# --- usage collection windows (see prometheus.ts) ---
+usageWindow: "7d"
+usageStep: "5m"
+
+# The agent should be a good FinOps citizen — tight requests/limits.
+resources:
+  requests:
+    cpu: 50m
+    memory: 64Mi
+  limits:
+    cpu: 200m
+    memory: 128Mi

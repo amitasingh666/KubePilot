@@ -1,0 +1,43 @@
+# All three RBAC objects in one file (separated by ---): the agent's identity,
+# its read-only permissions, and the link between them.
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: kubepilot-agent
+  namespace: {{ .Release.Namespace }}
+---
+# Read-only across the cluster — exactly the resources collect.ts / usage.ts read.
+# Only get/list/watch: the agent can look, never change anything.
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  name: kubepilot-agent
+rules:
+  - apiGroups: [""]
+    resources: ["nodes", "pods", "namespaces", "persistentvolumeclaims", "services"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["apps"]
+    resources: ["deployments", "daemonsets", "statefulsets", "replicasets"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["batch"]
+    resources: ["jobs", "cronjobs"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["autoscaling"]
+    resources: ["horizontalpodautoscalers"]
+    verbs: ["get", "list", "watch"]
+  - apiGroups: ["policy"]
+    resources: ["poddisruptionbudgets"]
+    verbs: ["get", "list", "watch"]
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: kubepilot-agent
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: kubepilot-agent
+subjects:
+  - kind: ServiceAccount
+    name: kubepilot-agent
+    namespace: {{ .Release.Namespace }}

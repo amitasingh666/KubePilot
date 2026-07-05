@@ -1,0 +1,45 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kubepilot-agent
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app.kubernetes.io/name: kubepilot-agent
+spec:
+  replicas: 1
+  # The agent is a singleton — two running at once would double-collect and
+  # double-push. Recreate (stop old before starting new) enforces that and also
+  # avoids a rolling-update surge that can't be scheduled on a full node.
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: kubepilot-agent
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: kubepilot-agent
+    spec:
+      serviceAccountName: kubepilot-agent
+      containers:
+        - name: agent
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          env:
+            - name: AGENT_CLUSTER_ID
+              value: {{ required "clusterId is required — pass --set clusterId=..." .Values.clusterId | quote }}
+            - name: AGENT_TOKEN
+              valueFrom:
+                secretKeyRef:
+                  name: kubepilot-agent-token
+                  key: token
+            - name: INGESTION_URL
+              value: {{ .Values.ingestionUrl | quote }}
+            - name: PROMETHEUS_URL
+              value: {{ .Values.prometheusUrl | quote }}
+            - name: USAGE_WINDOW
+              value: {{ .Values.usageWindow | quote }}
+            - name: USAGE_STEP
+              value: {{ .Values.usageStep | quote }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
