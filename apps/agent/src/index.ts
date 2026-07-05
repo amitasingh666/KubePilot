@@ -1,22 +1,27 @@
-import { AGENT_CONTRACT_VERSION, type Snapshot } from "@kubepilot/contract";
+import { KubeConfig } from "@kubernetes/client-node";
+import { collectInventorySnapshot } from "./collect.js";
 
-/**
- * Phase 0 placeholder. Proves the agent can build and share the ingestion
- * contract with the backend. Real collection (K8s API + Prometheus PromQL,
- * PodSpec stripping, buffered/idempotent push) lands in Phase 1.
- */
-function main() {
-  // Type-only sanity: the agent will emit Snapshot values that match the
-  // contract the backend validates. (No runtime work yet.)
-  const _example: Pick<Snapshot, "contractVersion" | "payloadKind"> = {
-    contractVersion: AGENT_CONTRACT_VERSION,
-    payloadKind: "inventory",
-  };
+const AGENT_VERSION = "0.0.1";
+// The real cluster id is injected at Helm install (Stage I). For local dev it
+// comes from an env var, with a placeholder fallback so validation passes.
+const CLUSTER_ID = process.env.AGENT_CLUSTER_ID ?? "00000000-0000-0000-0000-000000000000";
 
+async function main() {
+  const kc = new KubeConfig();
+  kc.loadFromDefault(); // local kubeconfig now; in-cluster config later (Stage I)
+
+  const snapshot = await collectInventorySnapshot(kc, CLUSTER_ID, AGENT_VERSION);
+
+  const inv = snapshot.inventory!;
+  console.log(JSON.stringify(snapshot, null, 2));
   console.log(
-    `KubePilot agent (stub) — ingestion contract v${AGENT_CONTRACT_VERSION}, sample payloadKind="${_example.payloadKind}"`,
+    `✅ valid inventory snapshot: ${inv.nodes.length} nodes, ` +
+      `${inv.workloads.length} workloads, ${inv.autoscalers.length} autoscalers, ` +
+      `${inv.pvcs.length} pvcs, ${inv.services.length} services`,
   );
-  console.log("Phase 0 placeholder: real collection & push land in Phase 1.");
 }
 
-main();
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

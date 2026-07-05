@@ -13,7 +13,8 @@
     "test": "echo \"(no tests yet)\""
   },
   "dependencies": {
-    "@kubepilot/contract": "workspace:*"
+    "@kubepilot/contract": "workspace:*",
+    "@kubernetes/client-node": "^1.4.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.5",
