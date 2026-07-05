@@ -46,6 +46,41 @@ export async function createClusterConnection(tenantId: string, name: string) {
 }
 
 
+/**
+ * Rotate a cluster's agent token: issue a fresh token and give the currently
+ * active token(s) a GRACE window instead of revoking them instantly — so the
+ * running agent keeps working until the operator redeploys it with the new
+ * token. After the grace window the old token expires on its own
+ * (verifyAgentToken rejects expired credentials).
+ */
+export async function rotateClusterToken(clusterId: string) {
+  const prisma = getRootClient();
+  const graceMs = Number(process.env.TOKEN_ROTATION_GRACE_MS ?? 24 * 60 * 60_000); // 24h default
+
+  const cluster = await prisma.cluster.findUnique({ where: { id: clusterId } });
+  if (!cluster) throw new Error(`cluster ${clusterId} not found`);
+
+  // 1. Mint + hash the new token (same scheme as createClusterConnection).
+  const token = "kp_" + randomBytes(32).toString("base64url");
+  const tokenHash = hashToken(token);
+  const graceUntil = new Date(Date.now() + graceMs);
+
+  await prisma.$transaction(async (tx) => {
+    // 2. Give existing never-expiring active tokens a grace deadline. (Tokens
+    //    already in a grace window — expiresAt set — are left as-is.)
+    await tx.agentCredential.updateMany({
+      where: { clusterId, status: "active", expiresAt: null },
+      data: { expiresAt: graceUntil },
+    });
+    // 3. Issue the new credential (active, no expiry).
+    await tx.agentCredential.create({
+      data: { tenantId: cluster.tenantId, clusterId, tokenHash },
+    });
+  });
+
+  return { clusterId, token, graceUntil, helmUpgrade: buildHelmInstallCommand(clusterId, token) };
+}
+
 export async function verifyAgentToken(token: string): Promise<
   { tenantId: string; clusterId: string; credentialId: string } | null
 > {

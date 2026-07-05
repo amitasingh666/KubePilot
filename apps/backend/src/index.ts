@@ -3,7 +3,7 @@ import { Redis } from "ioredis";
 import { getRootClient } from "@kubepilot/db";
 import { AGENT_CONTRACT_VERSION } from "@kubepilot/contract";
 import { config } from "./config.js";
-import { verifyAgentToken } from "./clusters.js";
+import { verifyAgentToken, rotateClusterToken } from "./clusters.js";
 import { Snapshot } from "@kubepilot/contract";
 import { Queue } from "bullmq";
 
@@ -98,6 +98,19 @@ app.post("/ingest", async (req, reply) => {
   });
   
   return reply.code(202).send({ ok: true, queued: true });
+});
+
+// Rotate a cluster's agent token. Returns the new token + grace deadline.
+// ⚠️ Phase 4: this MUST be gated by user auth (OIDC/RBAC) + tenant-scoping —
+// today it's unauthenticated, so treat it as internal/dashboard-only for now.
+app.post("/clusters/:clusterId/rotate-token", async (req, reply) => {
+  const { clusterId } = req.params as { clusterId: string };
+  try {
+    const result = await rotateClusterToken(clusterId);
+    return reply.code(200).send(result);
+  } catch (err) {
+    return reply.code(404).send({ error: (err as Error).message });
+  }
 });
 
 async function start() {
