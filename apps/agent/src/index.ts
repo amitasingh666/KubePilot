@@ -1,5 +1,6 @@
 import { KubeConfig } from "@kubernetes/client-node";
 import { collectInventorySnapshot } from "./collect.js";
+import { collectUsageSnapshot } from "./usage.js";
 
 const AGENT_VERSION = "0.0.1";
 // The real cluster id is injected at Helm install (Stage I). For local dev it
@@ -10,14 +11,22 @@ async function main() {
   const kc = new KubeConfig();
   kc.loadFromDefault(); // local kubeconfig now; in-cluster config later (Stage I)
 
-  const snapshot = await collectInventorySnapshot(kc, CLUSTER_ID, AGENT_VERSION);
 
-  const inv = snapshot.inventory!;
-  console.log(JSON.stringify(snapshot, null, 2));
+  const inventorySnapshot = await collectInventorySnapshot(kc, CLUSTER_ID, AGENT_VERSION);
+  const inv = inventorySnapshot.inventory!;
   console.log(
-    `✅ valid inventory snapshot: ${inv.nodes.length} nodes, ` +
+    `✅ inventory snapshot: ${inv.nodes.length} nodes, ` +
       `${inv.workloads.length} workloads, ${inv.autoscalers.length} autoscalers, ` +
       `${inv.pvcs.length} pvcs, ${inv.services.length} services`,
+  );
+
+
+  const usageSnapshot = await collectUsageSnapshot(kc, CLUSTER_ID, AGENT_VERSION);
+  const usage = usageSnapshot.usage!;
+  console.log(JSON.stringify(usageSnapshot, null, 2));
+  console.log(
+    `✅ usage snapshot: ${usage.workloads.length} workloads over window ` +
+      `[${usage.workloads[0]?.windowStart ?? "n/a"} → ${usage.workloads[0]?.windowEnd ?? "n/a"}]`,
   );
 }
 
