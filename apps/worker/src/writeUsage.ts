@@ -19,7 +19,12 @@ export async function writeUsage(
 
   // --- workload usage ---
   for (const wu of u.workloads) {
-    const wl = await tx.workload.findUnique({
+    // Resolve the workload id, creating a minimal stub if inventory hasn't landed
+    // yet. Inventory and usage are independent jobs with no ordering guarantee, so
+    // a brand-new cluster's first usage snapshot can arrive before its inventory —
+    // without this, that first sample would be silently dropped. A later inventory
+    // push enriches the stub (upsert on the same unique key).
+    const wl = await tx.workload.upsert({
       where: {
         clusterId_namespace_name_kind: {
           clusterId,
@@ -28,9 +33,16 @@ export async function writeUsage(
           kind: wu.kind,
         },
       },
+      create: {
+        tenantId,
+        clusterId,
+        namespace: wu.namespace,
+        name: wu.workload,
+        kind: wu.kind,
+      },
+      update: {},
       select: { id: true },
     });
-    if (!wl) continue; // usage for a workload we haven't ingested yet → skip
 
     const ts = new Date(wu.windowEnd);
     const data = {

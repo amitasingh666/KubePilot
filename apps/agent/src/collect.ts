@@ -1,6 +1,6 @@
 import { KubeConfig, CoreV1Api, AppsV1Api, AutoscalingV2Api, PolicyV1Api } from "@kubernetes/client-node";
-import type { V1Node, V1Deployment, V1Container, V2HorizontalPodAutoscaler,
-    V1PersistentVolumeClaim, V1Service, V1PodDisruptionBudget, V1PodSpec } from "@kubernetes/client-node";
+import type { V1Node, V1Deployment, V1DaemonSet, V1StatefulSet, V1Container, V2HorizontalPodAutoscaler,
+    V1PersistentVolumeClaim, V1Service, V1PodDisruptionBudget, V1PodSpec, V1ObjectMeta } from "@kubernetes/client-node";
 import { Snapshot, serializeIdempotencyKey } from "@kubepilot/contract";
 import type { NodeInventory, WorkloadInventory, ResourceQuantities, AutoscalerInventory,
      WorkloadKind, PvcInventory, ServiceInventory, PdbInventory, SchedulingConstraint } from "@kubepilot/contract";
@@ -95,26 +95,35 @@ function toSchedulingConstraint(spec?: V1PodSpec): SchedulingConstraint | null {
 }
 
 
-export function toWorkloadInventory(d: V1Deployment,  managedByMap: Map<string, string>): WorkloadInventory {
-    const containers = d.spec?.template?.spec?.containers ?? [];
+// Generic mapper for any pod-templated workload (Deployment / DaemonSet /
+// StatefulSet). They all expose metadata + spec.template.spec; only `kind` and
+// where `replicas` comes from differ, so the caller passes those in.
+export function toWorkload(
+    meta: V1ObjectMeta | undefined,
+    podSpec: V1PodSpec | undefined,
+    kind: WorkloadKind,
+    replicas: number | null,
+    managedByMap: Map<string, string>,
+): WorkloadInventory {
+    const containers = podSpec?.containers ?? [];
     // Build the per-container specs once, then reuse for both the container list
     // and the workload-level aggregate.
     const specs = containers.map((c) => ({ name: c.name, resources: containerResources(c) }));
     const rq = specs.map((s) => s.resources);
-    const namespace = d.metadata?.namespace ?? "";
-    const name = d.metadata?.name ?? "";
-    const key = `${namespace}/deployment/${name}`;
+    const namespace = meta?.namespace ?? "";
+    const name = meta?.name ?? "";
+    const key = `${namespace}/${kind}/${name}`; // uses the real kind so non-Deployment autoscalers match too
     return {
         name,
         namespace,
-        kind: "deployment",
-        labels: d.metadata?.labels ?? {},
-        replicas: d.spec?.replicas ?? null,
+        kind,
+        labels: meta?.labels ?? {},
+        replicas,
         containers: specs,
         managedBy: managedByMap.get(key) ?? "none",
         gitopsOwned: false,
         qosClass: null,
-        constraints: toSchedulingConstraint(d.spec?.template?.spec),
+        constraints: toSchedulingConstraint(podSpec),
         resources: {
             cpuRequestMillicores: sumField(rq, (r) => r.cpuRequestMillicores),
             cpuLimitMillicores: sumField(rq, (r) => r.cpuLimitMillicores),
@@ -125,8 +134,22 @@ export function toWorkloadInventory(d: V1Deployment,  managedByMap: Map<string, 
 }
 
 export async function collectWorkloads(apps: AppsV1Api,  managedByMap: Map<string, string> ): Promise<WorkloadInventory[]> {
-    const res = await apps.listDeploymentForAllNamespaces();
-    return res.items.map((d) => toWorkloadInventory(d, managedByMap));
+    // Collect all three pod-templated kinds so their usage isn't dropped downstream.
+    // (A DaemonSet has no spec.replicas — its "replica count" is how many nodes it
+    // runs on, i.e. status.desiredNumberScheduled.)
+    const [deployments, daemonsets, statefulsets] = await Promise.all([
+        apps.listDeploymentForAllNamespaces(),
+        apps.listDaemonSetForAllNamespaces(),
+        apps.listStatefulSetForAllNamespaces(),
+    ]);
+    return [
+        ...deployments.items.map((d: V1Deployment) =>
+            toWorkload(d.metadata, d.spec?.template?.spec, "deployment", d.spec?.replicas ?? null, managedByMap)),
+        ...daemonsets.items.map((ds: V1DaemonSet) =>
+            toWorkload(ds.metadata, ds.spec?.template?.spec, "daemonset", ds.status?.desiredNumberScheduled ?? null, managedByMap)),
+        ...statefulsets.items.map((s: V1StatefulSet) =>
+            toWorkload(s.metadata, s.spec?.template?.spec, "statefulset", s.spec?.replicas ?? null, managedByMap)),
+    ];
 }
 
 export function toAutoscalerInventory(h: V2HorizontalPodAutoscaler): AutoscalerInventory {

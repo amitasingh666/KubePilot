@@ -10,7 +10,7 @@
     "dev": "tsx watch src/index.ts",
     "start": "node dist/index.js",
     "lint": "echo \"(lint placeholder)\"",
-    "test": "echo \"(no tests yet)\""
+    "test": "vitest run"
   },
   "dependencies": {
     "@kubepilot/contract": "workspace:*",
@@ -19,6 +19,7 @@
   "devDependencies": {
     "@types/node": "^22.10.5",
     "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "typescript": "^5.7.2",
+    "vitest": "^4.1.9"
   }
 }
