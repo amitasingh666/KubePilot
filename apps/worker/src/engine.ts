@@ -4,6 +4,7 @@ import { Redis } from "ioredis";
 import { getRootClient } from "@kubepilot/db";
 import { buildAnalysisInputs } from "./analysisInputs.js";
 import { cpuRightsizing, type Recommendation } from "./rules/cpuRightsizing.js";
+import { memoryRightsizing, type MemRecommendation } from "./rules/memoryRightsizing.js";
 
 const redisUrl = process.env.REDIS_QUEUE_URL;
 if (!redisUrl) throw new Error("REDIS_QUEUE_URL is not set");
@@ -35,13 +36,19 @@ const engineWorker = new Worker(
         if (job.name === "analyze-tenant") {
             const { tenantId } = job.data as { tenantId: string };
             const inputs = await buildAnalysisInputs(prisma, tenantId);
-            const recs = inputs
+            const cpuRecs = inputs
                 .map(cpuRightsizing)
                 .filter((r): r is Recommendation => r !== null);
+            const memRecs = inputs
+                .map(memoryRightsizing)
+                .filter((r): r is MemRecommendation => r !== null);
             console.log(
-                `tenant ${tenantId}: ${inputs.length} workloads → ${recs.length} CPU rightsizing recs`,
+                `tenant ${tenantId}: ${inputs.length} workloads → ` +
+                    `${cpuRecs.length} CPU + ${memRecs.length} memory rightsizing recs`,
             );
-            for (const r of recs) console.log(`  • ${r.namespace}/${r.name}: ${r.rationale}`);
+            for (const r of [...cpuRecs, ...memRecs]) {
+                console.log(`  • ${r.namespace}/${r.name}: ${r.rationale}`);
+            }
             return;
         }
     },
