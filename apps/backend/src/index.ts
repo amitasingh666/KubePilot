@@ -1,13 +1,25 @@
 import Fastify from "fastify";
+import cors from "@fastify/cors";
 import { Redis } from "ioredis";
+import { fastifyTRPCPlugin } from "@trpc/server/adapters/fastify";
 import { getRootClient } from "@kubepilot/db";
 import { AGENT_CONTRACT_VERSION } from "@kubepilot/contract";
 import { config } from "./config.js";
 import { verifyAgentToken, rotateClusterToken } from "./clusters.js";
 import { Snapshot } from "@kubepilot/contract";
 import { Queue } from "bullmq";
+import { appRouter } from "./trpc/router.js";
+import { createContext } from "./trpc/context.js";
 
 const app = Fastify({ logger: true });
+
+// Dashboard API (user-facing) — tRPC under /trpc, with CORS for the SPA.
+// The agent-facing routes below (/ingest, token auth) stay separate.
+await app.register(cors, { origin: config.WEB_ORIGIN, credentials: true });
+await app.register(fastifyTRPCPlugin, {
+  prefix: "/trpc",
+  trpcOptions: { router: appRouter, createContext },
+});
 
 const prisma = getRootClient();
 const redisQueue = new Redis(config.REDIS_QUEUE_URL, {
