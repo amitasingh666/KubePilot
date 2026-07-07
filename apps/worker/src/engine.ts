@@ -7,6 +7,8 @@ import { cpuRightsizing } from "./rules/cpuRightsizing.js";
 import { memoryRightsizing } from "./rules/memoryRightsizing.js";
 import { replicaOptimization } from "./rules/replicaOptimization.js";
 import { unusedCleanup } from "./rules/unusedCleanup.js";
+import { nodeConsolidationRecs } from "./rules/nodeConsolidation.js";
+import { orphanedPvcRecs } from "./rules/orphanedPvc.js";
 import { persistRecommendations, type AnyRecommendation } from "./persistRecommendations.js";
 
 // The rule registry: each takes one workload's inputs and returns a rec or null.
@@ -48,10 +50,16 @@ const engineWorker = new Worker(
         if (job.name === "analyze-tenant") {
             const { tenantId } = job.data as { tenantId: string };
             const inputs = await buildAnalysisInputs(prisma, tenantId);
-            const recs = RULES.flatMap((rule) => inputs.map(rule)).filter(
+            // Per-workload rules + per-cluster bin-packing (node consolidation).
+            const workloadRecs = RULES.flatMap((rule) => inputs.map(rule)).filter(
                 (r): r is AnyRecommendation => r !== null,
             );
-            const n = await persistRecommendations(prisma, tenantId, recs);
+            const nodeRecs = await nodeConsolidationRecs(prisma, tenantId);
+            const pvcRecs = await orphanedPvcRecs(prisma, tenantId);
+            const recs: AnyRecommendation[] = [...workloadRecs, ...nodeRecs, ...pvcRecs];
+            // GitOps-owned lookup for patch generation (kubectl vs PR-to-source).
+            const gitopsByWorkload = new Map(inputs.map((i) => [i.workloadId, i.gitopsOwned]));
+            const n = await persistRecommendations(prisma, tenantId, recs, gitopsByWorkload);
             const byType = recs.reduce<Record<string, number>>((acc, r) => {
                 acc[r.type] = (acc[r.type] ?? 0) + 1;
                 return acc;

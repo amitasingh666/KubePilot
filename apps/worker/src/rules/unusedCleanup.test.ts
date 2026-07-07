@@ -9,6 +9,7 @@ function input(over: Partial<AnalysisInput> = {}): AnalysisInput {
     name: "legacy-worker",
     kind: "deployment",
     managedBy: "none",
+    gitopsOwned: false,
     pdbMinReplicas: null,
     replicas: 2,
     cpuRequestM: 100,

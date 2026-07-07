@@ -394,24 +394,49 @@ model StabilityEvent {
   @@map("stability_event")
 }
 model Recommendation {
-  id            String    @id @default(uuid()) @db.Uuid
-  tenantId      String    @map("tenant_id") @db.Uuid
-  workloadId    String    @map("workload_id") @db.Uuid
-  type          String                                  // cpu-rightsize | memory-rightsize
-  resource      String                                  // cpu | memory
-  unit          String                                  // millicores | bytes
-  currentValue  BigInt    @map("current_value")         // BigInt holds both millicores and bytes
-  proposedValue BigInt    @map("proposed_value")
-  savings       BigInt
-  confidence    String                                  // low | high
-  status        String    @default("open")              // open | applied | dismissed
-  rationale     String
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime? @updatedAt @map("updated_at")
+  id              String    @id @default(uuid()) @db.Uuid
+  tenantId        String    @map("tenant_id") @db.Uuid
+  // Target descriptor — a rec can point at a workload OR a node/pvc/cluster.
+  targetKind      String    @default("workload") @map("target_kind") // workload | node | pvc | cluster
+  targetName      String?   @map("target_name")
+  targetNamespace String?   @map("target_namespace")
+  workloadId      String?   @map("workload_id") @db.Uuid             // set only for workload-scoped recs
+  type            String                                  // cpu-rightsize | memory-rightsize | replica-optimize | cleanup | node-consolidate
+  resource        String                                  // cpu | memory | replicas | workload | nodes
+  unit            String                                  // millicores | bytes | count
+  currentValue    BigInt    @map("current_value")         // BigInt holds millicores, bytes, or a count
+  proposedValue   BigInt    @map("proposed_value")
+  savings         BigInt
+  confidence      String                                  // low | high
+  status          String    @default("open")              // open | applied | dismissed
+  rationale       String
+  patch           String?                                  // copy-paste kubectl/YAML to apply
+  patchMode       String?   @map("patch_mode")             // kubectl | gitops
+  planId          String?   @map("plan_id") @db.Uuid       // the reconciled plan this rec belongs to
+  createdAt       DateTime  @default(now()) @map("created_at")
+  updatedAt       DateTime? @updatedAt @map("updated_at")
 
-  workload Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  workload Workload?         @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+  plan     OptimizationPlan? @relation(fields: [planId], references: [id], onDelete: Cascade)
 
   @@index([tenantId])
   @@index([workloadId])
+  @@index([planId])
   @@map("recommendation")
+}
+
+// One reconciled plan per tenant per analysis run — groups the run's recs and
+// carries a single confidence. (The reconciled $ savings is Phase 3 / cost.)
+model OptimizationPlan {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  status     String   @default("open")
+  recCount   Int      @map("rec_count")
+  confidence String                                        // low | high
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  recommendations Recommendation[]
+
+  @@index([tenantId])
+  @@map("optimization_plan")
 }

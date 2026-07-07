@@ -15,6 +15,7 @@ export type AnalysisInput = {
   name: string;
   kind: string;
   managedBy: string;
+  gitopsOwned: boolean; // true → patches must go via a PR to source, not kubectl
   replicas: number | null;
   // Highest integer PDB minAvailable that selects this workload's pods (null = none). Floor for replica cuts.
   pdbMinReplicas: number | null;
@@ -109,6 +110,7 @@ export async function buildAnalysisInputs(
       name: true,
       kind: true,
       managedBy: true,
+      gitopsOwned: true,
       replicas: true,
       podLabels: true,
       cpuRequestM: true,
@@ -142,6 +144,7 @@ export async function buildAnalysisInputs(
       name: w.name,
       kind: w.kind,
       managedBy: w.managedBy,
+      gitopsOwned: w.gitopsOwned,
       replicas: w.replicas,
       pdbMinReplicas,
       cpuRequestM: w.cpuRequestM,
