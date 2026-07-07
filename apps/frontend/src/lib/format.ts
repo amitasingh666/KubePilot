@@ -16,3 +16,13 @@ export function usd(n: number | null | undefined): string {
   if (n == null) return "—";
   return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD" }).format(n);
 }
+
+/** millicores → "1.5 cores" */
+export function cores(m: number): string {
+  return `${(m / 1000).toFixed(1)} cores`;
+}
+
+/** bytes → "3.2 GiB" */
+export function gib(bytes: number): string {
+  return `${(bytes / 1024 ** 3).toFixed(1)} GiB`;
+}
