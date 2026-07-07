@@ -11,6 +11,8 @@ import { nodeConsolidationRecs } from "./rules/nodeConsolidation.js";
 import { orphanedPvcRecs } from "./rules/orphanedPvc.js";
 import { persistRecommendations, type AnyRecommendation } from "./persistRecommendations.js";
 import { computeAndPersistCost } from "./cost/computeCost.js";
+import { runFeedback } from "./runFeedback.js";
+import { runDigest } from "./runDigest.js";
 
 // The rule registry: each takes one workload's inputs and returns a rec or null.
 // Add a new rule → add it here; nothing else in the engine changes.
@@ -30,6 +32,8 @@ const workerConnection = new Redis(redisUrl, { maxRetriesPerRequest: null });
 
 // How often analysis runs. Daily by default; override short for local dev.
 const ANALYSIS_INTERVAL_MS = Number(process.env.ANALYSIS_INTERVAL_MS ?? 24 * 60 * 60_000);
+// How often the email digest is sent (daily by default).
+const DIGEST_INTERVAL_MS = Number(process.env.DIGEST_INTERVAL_MS ?? 24 * 60 * 60_000);
 
 const analysisQueue = new Queue("analysis", { connection });
 const prisma = getRootClient();
@@ -75,6 +79,23 @@ const engineWorker = new Worker(
                 `tenant ${tenantId}: cost → realized $${cost.realizedMonthlyUsd}/mo, waste $${cost.wasteMonthlyUsd}/mo, ` +
                 `${cost.breakdownRows} breakdown rows, ${cost.pricedRecs} recs priced`,
             );
+            // Phase 5 — feedback loop: infer applied optimizations from revision history.
+            const detected = await runFeedback(prisma, tenantId);
+            console.log(`tenant ${tenantId}: feedback → ${detected} applied optimization(s) detected`);
+            return;
+        }
+        // Phase 5 — digest fanout tick → one digest job per tenant.
+        if (job.name === "digest-fanout") {
+            const tenants = await prisma.tenant.findMany({ select: { id: true } });
+            for (const t of tenants) await analysisQueue.add("digest-tenant", { tenantId: t.id });
+            console.log(`fanned out digests for ${tenants.length} tenants`);
+            return;
+        }
+        // One tenant's digest — build, store in S3, send via the email sender.
+        if (job.name === "digest-tenant") {
+            const { tenantId } = job.data as { tenantId: string };
+            const sent = await runDigest(prisma, tenantId);
+            console.log(sent ? `tenant ${tenantId}: digest sent → ${sent.to} (${sent.key})` : `tenant ${tenantId}: digest skipped (no owner)`);
             return;
         }
     },
@@ -83,9 +104,10 @@ const engineWorker = new Worker(
 
 engineWorker.on("failed", (job, err) => console.error("❌ analysis job failed", job?.id, err));
 
-// Register the repeatable fan-out tick (idempotent across restarts).
+// Register the repeatable fan-out ticks (idempotent across restarts).
 await analysisQueue.add("fanout", {}, { repeat: { every: ANALYSIS_INTERVAL_MS } });
-console.log("⚙️  engine started — analysis scheduler running");
+await analysisQueue.add("digest-fanout", {}, { repeat: { every: DIGEST_INTERVAL_MS } });
+console.log("⚙️  engine started — analysis + digest schedulers running");
 
 const shutdown = async () => {
     await Promise.all([engineWorker.close(), analysisQueue.close()]);

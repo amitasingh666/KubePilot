@@ -7,6 +7,7 @@ import { ClustersPage } from "./routes/clusters";
 import { ConnectClusterPage } from "./routes/connect-cluster";
 import { ClusterDetailPage } from "./routes/cluster-detail";
 import { RecommendationsPage } from "./routes/recommendations";
+import { ReportsPage } from "./routes/reports";
 
 export function App() {
   return (
@@ -25,6 +26,7 @@ export function App() {
         <Route path="/clusters/new" element={<ConnectClusterPage />} />
         <Route path="/clusters/:id" element={<ClusterDetailPage />} />
         <Route path="/recommendations" element={<RecommendationsPage />} />
+        <Route path="/reports" element={<ReportsPage />} />
       </Route>
     </Routes>
   );

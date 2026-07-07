@@ -1,10 +1,13 @@
 import { useState } from "react";
 import { motion } from "framer-motion";
+import { Download } from "lucide-react";
 import { trpc } from "../lib/trpc";
 import { usd, cores, gib } from "../lib/format";
 import { stagger, fadeUp } from "../lib/motion";
+import { toCsv, downloadCsv, reportFilename } from "../lib/csv";
 import { Card, CardContent } from "../components/ui/card";
 import { Badge } from "../components/ui/badge";
+import { Button } from "../components/ui/button";
 import { CopyButton } from "../components/ui/copy-button";
 import { Skeleton } from "../components/ui/skeleton";
 import { cn } from "../lib/utils";
@@ -33,11 +36,32 @@ export function RecommendationsPage() {
   const types = ["all", ...Array.from(new Set(all.map((r) => r.type)))];
   const shown = filter === "all" ? all : all.filter((r) => r.type === filter);
 
+  const exportCsv = () => {
+    const csv = toCsv(shown, [
+      { header: "type", get: (r) => r.type },
+      { header: "namespace", get: (r) => r.targetNamespace ?? "" },
+      { header: "target", get: (r) => r.targetName ?? "" },
+      { header: "resource", get: (r) => r.resource },
+      { header: "unit", get: (r) => r.unit },
+      { header: "current", get: (r) => r.currentValue ?? "" },
+      { header: "proposed", get: (r) => r.proposedValue ?? "" },
+      { header: "savings_usd_per_mo", get: (r) => r.savingsUsd ?? "" },
+      { header: "savings_kind", get: (r) => r.savingsKind ?? "" },
+      { header: "confidence", get: (r) => r.confidence },
+    ]);
+    downloadCsv(reportFilename("recommendations"), csv);
+  };
+
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-6">
-      <motion.div variants={fadeUp}>
-        <h1 className="text-2xl font-bold tracking-tight">Recommendations</h1>
-        <p className="text-muted-foreground">Ranked by monthly savings. Recommend-only — copy the patch to apply.</p>
+      <motion.div variants={fadeUp} className="flex items-start justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-bold tracking-tight">Recommendations</h1>
+          <p className="text-muted-foreground">Ranked by monthly savings. Recommend-only — copy the patch to apply.</p>
+        </div>
+        <Button variant="outline" size="sm" onClick={exportCsv} disabled={shown.length === 0}>
+          <Download size={14} /> Export CSV
+        </Button>
       </motion.div>
 
       <motion.div variants={fadeUp} className="flex flex-wrap gap-2">

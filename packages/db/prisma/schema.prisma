@@ -471,6 +471,28 @@ model PriceOverride {
   @@map("price_override")
 }
 
+// Phase 5 — feedback loop. Detected optimizations, inferred by diffing
+// workload_revision history (a request/replica DROP = something was rightsized).
+// Kept in its OWN table because recommendation rows are rewritten each analysis
+// run; outcomes must persist to make the ≥90% accuracy KPI measurable.
+model OptimizationOutcome {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  clusterId  String?  @map("cluster_id") @db.Uuid
+  workloadId String   @map("workload_id") @db.Uuid
+  resource   String                                     // cpu | memory | replicas
+  fromValue  BigInt   @map("from_value")                // pre-change (millicores | bytes | count)
+  toValue    BigInt   @map("to_value")                  // post-change
+  detectedAt DateTime @map("detected_at")               // the revision observedAt where the drop appeared
+  safe       Boolean                                    // no OOMKill/regression after (predicted-vs-actual)
+  note       String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@unique([workloadId, resource, detectedAt])          // idempotent re-detection
+  @@index([tenantId])
+  @@map("optimization_outcome")
+}
+
 model Recommendation {
   id              String    @id @default(uuid()) @db.Uuid
   tenantId        String    @map("tenant_id") @db.Uuid

@@ -39,4 +39,13 @@ export const costRouter = router({
       topNamespaces,
     };
   }),
+
+  /** Full cost breakdown (all scopes) for the Reports page. Read-only. */
+  breakdown: protectedProcedure.query(async ({ ctx }) => {
+    const rows = await ctx.db.costBreakdown.findMany({
+      select: { scope: true, name: true, namespace: true, monthlyUsd: true },
+      orderBy: { monthlyUsd: "desc" },
+    });
+    return rows.map((r) => ({ ...r, monthlyUsd: n(r.monthlyUsd) }));
+  }),
 });

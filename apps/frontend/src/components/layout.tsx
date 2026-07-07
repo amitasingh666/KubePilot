@@ -1,6 +1,6 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Server, Lightbulb, LogOut, Gauge } from "lucide-react";
+import { LayoutDashboard, Server, Lightbulb, FileText, LogOut, Gauge } from "lucide-react";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/auth";
 import { ThemeToggle } from "./ui/theme-toggle";
@@ -10,6 +10,7 @@ const NAV = [
   { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
   { to: "/clusters", label: "Clusters", icon: Server, end: false },
   { to: "/recommendations", label: "Recommendations", icon: Lightbulb, end: false },
+  { to: "/reports", label: "Reports", icon: FileText, end: false },
 ];
 
 export function AppLayout() {

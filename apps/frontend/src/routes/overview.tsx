@@ -34,6 +34,7 @@ function Meter({ label, used, requested, fmt, icon: Icon }: { label: string; use
 export function OverviewPage() {
   const cost = trpc.cost.overview.useQuery();
   const util = trpc.utilization.overview.useQuery();
+  const feedback = trpc.feedback.summary.useQuery();
   const c = cost.data;
   const chartData = (c?.topNamespaces.length ? c.topNamespaces : c?.byCluster ?? []).slice(0, 8);
   const realizabilityTone = c?.realizability === "auto" ? "green" : c?.realizability === "manual" ? "amber" : "gray";
@@ -74,6 +75,37 @@ export function OverviewPage() {
               </>
             ) : (
               <><Skeleton className="h-6 w-full" /><Skeleton className="h-6 w-full" /></>
+            )}
+          </CardContent>
+        </Card>
+      </motion.div>
+
+      {/* Recommendation accuracy — the feedback loop's headline. */}
+      <motion.div variants={fadeUp}>
+        <Card>
+          <CardHeader><CardTitle>Recommendation accuracy</CardTitle></CardHeader>
+          <CardContent>
+            {feedback.isLoading ? (
+              <Skeleton className="h-16 w-full" />
+            ) : !feedback.data || feedback.data.detected === 0 ? (
+              <p className="text-sm text-muted-foreground">
+                No applied optimizations detected yet — accuracy appears once workloads are rightsized and revision history builds up.
+              </p>
+            ) : (
+              <div className="flex items-center gap-6">
+                <div>
+                  <div className="text-3xl font-bold tabular-nums text-primary">{feedback.data.accuracyPct}%</div>
+                  <div className="text-xs text-muted-foreground">stayed safe after change</div>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {feedback.data.safe} of {feedback.data.detected} detected optimizations had no post-change regression
+                  <div className="mt-1 flex flex-wrap gap-1.5">
+                    {feedback.data.recent.slice(0, 6).map((o, i) => (
+                      <Badge key={i} tone={o.safe ? "green" : "red"}>{o.resource}</Badge>
+                    ))}
+                  </div>
+                </div>
+              </div>
             )}
           </CardContent>
         </Card>
