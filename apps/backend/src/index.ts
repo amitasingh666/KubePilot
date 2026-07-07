@@ -1,5 +1,6 @@
 import Fastify from "fastify";
 import cors from "@fastify/cors";
+import cookie from "@fastify/cookie";
 import { Redis } from "ioredis";
 import { fastifyTRPCPlugin } from "@trpc/server/adapters/fastify";
 import { getRootClient } from "@kubepilot/db";
@@ -16,6 +17,7 @@ const app = Fastify({ logger: true });
 // Dashboard API (user-facing) — tRPC under /trpc, with CORS for the SPA.
 // The agent-facing routes below (/ingest, token auth) stay separate.
 await app.register(cors, { origin: config.WEB_ORIGIN, credentials: true });
+await app.register(cookie, { secret: config.SESSION_SECRET }); // parses req.cookies + signs
 await app.register(fastifyTRPCPlugin, {
   prefix: "/trpc",
   trpcOptions: { router: appRouter, createContext },

@@ -12,6 +12,8 @@ const EnvSchema = z.object({
   REDIS_CACHE_URL: z.string().min(1),
   // Dashboard origin allowed to call the tRPC API (Vite dev server by default).
   WEB_ORIGIN: z.string().default("http://localhost:5173"),
+  // Secret for signing session cookies. Override in every real environment.
+  SESSION_SECRET: z.string().min(16).default("dev-only-session-secret-change-me"),
 });
 
 export const config = EnvSchema.parse(process.env);

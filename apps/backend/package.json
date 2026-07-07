@@ -13,6 +13,7 @@
     "test": "echo \"(no tests yet)\""
   },
   "dependencies": {
+    "@fastify/cookie": "^11.0.2",
     "@fastify/cors": "^11.2.0",
     "@kubepilot/contract": "workspace:*",
     "@kubepilot/db": "workspace:*",

@@ -1,7 +1,8 @@
 import type { CreateFastifyContextOptions } from "@trpc/server/adapters/fastify";
 import { getRootClient } from "@kubepilot/db";
+import { getSession, SESSION_COOKIE } from "../auth/session.js";
 
-/** The authenticated principal — populated by the auth layer in Stage C. */
+/** The authenticated principal — resolved from the session cookie per request. */
 export type SessionUser = { id: string; tenantId: string; role: string };
 
 /**
@@ -13,10 +14,14 @@ export type SessionUser = { id: string; tenantId: string; role: string };
  *                     get a client that can only see their tenant's data.
  */
 export async function createContext({ req, res }: CreateFastifyContextOptions) {
+  // Resolve the session cookie → principal. Missing/expired → anonymous (null).
+  const sid = req.cookies?.[SESSION_COOKIE];
+  const user = sid ? await getSession(sid) : null;
+
   return {
     req,
     res,
-    user: null as SessionUser | null,
+    user,
     db: getRootClient(),
   };
 }
