@@ -10,6 +10,7 @@ import { unusedCleanup } from "./rules/unusedCleanup.js";
 import { nodeConsolidationRecs } from "./rules/nodeConsolidation.js";
 import { orphanedPvcRecs } from "./rules/orphanedPvc.js";
 import { persistRecommendations, type AnyRecommendation } from "./persistRecommendations.js";
+import { computeAndPersistCost } from "./cost/computeCost.js";
 
 // The rule registry: each takes one workload's inputs and returns a rec or null.
 // Add a new rule → add it here; nothing else in the engine changes.
@@ -67,6 +68,12 @@ const engineWorker = new Worker(
             console.log(
                 `tenant ${tenantId}: ${inputs.length} workloads → persisted ${n} recommendations`,
                 byType,
+            );
+            // Phase 3 — attach dollars: current cost, node-level savings, rollups.
+            const cost = await computeAndPersistCost(prisma, tenantId);
+            console.log(
+                `tenant ${tenantId}: cost → realized $${cost.realizedMonthlyUsd}/mo, waste $${cost.wasteMonthlyUsd}/mo, ` +
+                `${cost.breakdownRows} breakdown rows, ${cost.pricedRecs} recs priced`,
             );
             return;
         }

@@ -52,8 +52,9 @@ model Tenant {
   createdAt   DateTime  @default(now()) @map("created_at")
   updatedAt   DateTime? @updatedAt @map("updated_at")
 
-  memberships Membership[]
-  clusters    Cluster[]
+  memberships    Membership[]
+  clusters       Cluster[]
+  priceOverrides PriceOverride[]
 
   @@map("tenant")
 }
@@ -393,6 +394,83 @@ model StabilityEvent {
   @@index([workloadId, ts])
   @@map("stability_event")
 }
+
+// ─────────────────────────────────────────────────────────────────────────────
+// Phase 3 — Cost Engine · Stage A: pricing catalog
+//
+// The catalog is GLOBAL (no tenant_id): a given instance type in a given region
+// has the same public/list price for everyone. Anything tenant-specific
+// (negotiated rates, commitment mix) lives in PriceOverride below.
+// ─────────────────────────────────────────────────────────────────────────────
+
+// Public compute price list — one row per (provider, region, instanceType,
+// capacityType, source). Seeded from list prices (Stage B); real billing-derived
+// rates arrive later with source="billing" (Stage H) and coexist with the seed.
+model InstancePrice {
+  id             String   @id @default(uuid()) @db.Uuid
+  provider       String                                    // aws | gcp | azure
+  region         String                                    // e.g. us-east-1
+  instanceType   String   @map("instance_type")            // e.g. m5.xlarge
+  capacityType   String   @default("on-demand") @map("capacity_type") // on-demand | spot
+  source         String   @default("list")                 // list | billing
+  pricePerHourUsd Decimal @map("price_per_hour_usd") @db.Decimal(12, 6)
+  currency       String   @default("USD")
+  vcpu           Int?                                       // sanity-check + Karpenter re-selection (Stage F)
+  memMib         BigInt?  @map("mem_mib")
+  updatedAt      DateTime @updatedAt @map("updated_at")
+
+  // Same instance in the same region can have a list AND a billing price, and an
+  // on-demand AND a spot price — so all five fields are part of the identity.
+  @@unique([provider, region, instanceType, capacityType, source])
+  @@index([provider, region])
+  @@map("instance_price")
+}
+
+// Public storage price list — per-GB-month, one row per (provider, region,
+// volumeType, source). Used to cost PVCs / orphaned volumes.
+model StoragePrice {
+  id                 String   @id @default(uuid()) @db.Uuid
+  provider           String                                 // aws | gcp | azure
+  region             String
+  volumeType         String   @map("volume_type")           // e.g. gp3 | io2 | pd-ssd
+  source             String   @default("list")              // list | billing
+  pricePerGbMonthUsd Decimal  @map("price_per_gb_month_usd") @db.Decimal(12, 6)
+  currency           String   @default("USD")
+  updatedAt          DateTime @updatedAt @map("updated_at")
+
+  @@unique([provider, region, volumeType, source])
+  @@index([provider, region])
+  @@map("storage_price")
+}
+
+// Tenant-scoped price adjustments — negotiated rates or a commitment/spot mix
+// that override the catalog for one tenant. Resolved on top of the catalog in
+// Stage C. A row can target a specific instanceType, or a whole node group /
+// cluster (scope), and either pin an absolute rate OR apply a discount %.
+model PriceOverride {
+  id              String   @id @default(uuid()) @db.Uuid
+  tenantId        String   @map("tenant_id") @db.Uuid
+  scope           String   @default("instance_type")        // instance_type | node_group | cluster
+  provider        String?                                   // null = any
+  region          String?                                   // null = any
+  instanceType    String?  @map("instance_type")            // set when scope=instance_type
+  nodeGroup       String?  @map("node_group")               // set when scope=node_group
+  clusterId       String?  @map("cluster_id") @db.Uuid      // set when scope=cluster
+  commitmentType  String   @default("on-demand") @map("commitment_type") // on-demand | spot | savings-plan | cud | ri | negotiated
+  // Either an absolute rate OR a discount fraction (0..1) off the catalog price.
+  pricePerHourUsd Decimal? @map("price_per_hour_usd") @db.Decimal(12, 6)
+  discountPct     Decimal? @map("discount_pct") @db.Decimal(5, 4)
+  currency        String   @default("USD")
+  note            String?
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@map("price_override")
+}
+
 model Recommendation {
   id              String    @id @default(uuid()) @db.Uuid
   tenantId        String    @map("tenant_id") @db.Uuid
@@ -412,6 +490,8 @@ model Recommendation {
   rationale       String
   patch           String?                                  // copy-paste kubectl/YAML to apply
   patchMode       String?   @map("patch_mode")             // kubectl | gitops
+  savingsUsd      Decimal?  @map("savings_usd") @db.Decimal(14, 4) // Phase 3: monthly $ (null = unpriced)
+  savingsKind     String?   @map("savings_kind")            // realized | waste — NEVER sum across kinds
   planId          String?   @map("plan_id") @db.Uuid       // the reconciled plan this rec belongs to
   createdAt       DateTime  @default(now()) @map("created_at")
   updatedAt       DateTime? @updatedAt @map("updated_at")
@@ -433,10 +513,38 @@ model OptimizationPlan {
   status     String   @default("open")
   recCount   Int      @map("rec_count")
   confidence String                                        // low | high
+  // Phase 3 — reconciled dollars. Realized = $ freed by nodes the repack removes;
+  // waste = $ value of request reductions (does NOT save money until nodes go).
+  // Kept separate on purpose; they are not additive.
+  realizedMonthlyUsd Decimal? @map("realized_monthly_usd") @db.Decimal(14, 4)
+  wasteMonthlyUsd    Decimal? @map("waste_monthly_usd") @db.Decimal(14, 4)
+  currency           String   @default("USD")
+  realizability      String?  // auto | manual | mixed | n/a (Karpenter/CA vs manual node resize)
+  costComputedAt     DateTime? @map("cost_computed_at")
   createdAt  DateTime @default(now()) @map("created_at")
 
   recommendations Recommendation[]
 
   @@index([tenantId])
   @@map("optimization_plan")
+}
+
+// Phase 3 — Stage G: persisted cost rollups for dashboard queries. One row per
+// (tenant, cluster, scope, name); rewritten each analysis run (delete + insert).
+// scope = cluster (name = cluster) | namespace (name = ns) | workload (name = deploy).
+model CostBreakdown {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String   @map("tenant_id") @db.Uuid
+  clusterId  String   @map("cluster_id") @db.Uuid
+  scope      String                                        // cluster | namespace | workload
+  namespace  String?
+  workloadId String?  @map("workload_id") @db.Uuid
+  name       String                                        // cluster / namespace / workload name
+  monthlyUsd Decimal  @map("monthly_usd") @db.Decimal(14, 4)
+  currency   String   @default("USD")
+  computedAt DateTime @default(now()) @map("computed_at")
+
+  @@index([tenantId, clusterId])
+  @@index([tenantId, scope])
+  @@map("cost_breakdown")
 }
