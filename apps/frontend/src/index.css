@@ -2,42 +2,91 @@
 @tailwind components;
 @tailwind utilities;
 
-/* Design tokens — a calm FinOps palette (teal accent), light + dark. */
-:root {
-  --background: 210 20% 98%;
-  --foreground: 215 25% 15%;
-  --card: 0 0% 100%;
-  --card-foreground: 215 25% 15%;
-  --muted: 210 16% 93%;
-  --muted-foreground: 215 12% 45%;
-  --primary: 176 84% 32%;
-  --primary-foreground: 0 0% 100%;
-  --destructive: 0 72% 45%;
+/* ── Design tokens — dark-first FinOps palette (emerald-teal accent) ────────── */
+.dark {
+  --background: 224 30% 6%;
+  --surface: 223 26% 9%;
+  --card: 223 24% 10%;
+  --card-foreground: 210 25% 94%;
+  --elevated: 223 22% 13%;
+  --muted: 223 18% 15%;
+  --muted-foreground: 220 12% 56%;
+  --foreground: 210 25% 94%;
+  --primary: 165 82% 46%;
+  --primary-foreground: 224 30% 6%;
+  --accent: 190 90% 52%;
+  --success: 150 68% 46%;
+  --warning: 38 92% 55%;
+  --destructive: 0 72% 56%;
   --destructive-foreground: 0 0% 100%;
-  --border: 214 20% 88%;
+  --border: 223 16% 18%;
+  --ring: 165 82% 46%;
 }
 
-.dark {
-  --background: 215 30% 8%;
-  --foreground: 210 20% 92%;
-  --card: 215 28% 11%;
-  --card-foreground: 210 20% 92%;
-  --muted: 215 25% 16%;
-  --muted-foreground: 215 15% 60%;
-  --primary: 174 72% 45%;
-  --primary-foreground: 215 30% 8%;
-  --destructive: 0 63% 50%;
+:root {
+  --background: 210 30% 98%;
+  --surface: 0 0% 100%;
+  --card: 0 0% 100%;
+  --card-foreground: 222 30% 12%;
+  --elevated: 210 20% 96%;
+  --muted: 210 16% 93%;
+  --muted-foreground: 215 14% 42%;
+  --foreground: 222 32% 11%;
+  --primary: 165 74% 36%;
+  --primary-foreground: 0 0% 100%;
+  --accent: 190 82% 42%;
+  --success: 150 62% 38%;
+  --warning: 34 90% 44%;
+  --destructive: 0 70% 46%;
   --destructive-foreground: 0 0% 100%;
-  --border: 215 25% 20%;
+  --border: 214 22% 88%;
+  --ring: 165 74% 36%;
 }
 
 * {
   border-color: hsl(var(--border));
 }
 
+html,
 body {
   margin: 0;
+  min-height: 100%;
+}
+
+body {
   background: hsl(var(--background));
   color: hsl(var(--foreground));
-  font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  font-family: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Ambient depth: soft accent glows behind the app (dark mode). */
+.dark body {
+  background-image:
+    radial-gradient(60rem 60rem at 12% -10%, hsl(165 82% 46% / 0.06), transparent 60%),
+    radial-gradient(50rem 50rem at 100% 0%, hsl(190 90% 52% / 0.05), transparent 55%);
+  background-attachment: fixed;
+}
+
+@layer utilities {
+  /* Glassy translucent surface with blur. */
+  .glass {
+    background: hsl(var(--card) / 0.7);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+  }
+  /* Emerald→cyan gradient text. */
+  .text-gradient {
+    background-image: linear-gradient(100deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .bg-gradient-primary {
+    background-image: linear-gradient(100deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+  /* Thin custom scrollbars. */
+  .scroll-slim::-webkit-scrollbar { width: 8px; height: 8px; }
+  .scroll-slim::-webkit-scrollbar-thumb { background: hsl(var(--border)); border-radius: 8px; }
+  .scroll-slim::-webkit-scrollbar-track { background: transparent; }
 }

@@ -6,16 +6,7 @@ import { OverviewPage } from "./routes/overview";
 import { ClustersPage } from "./routes/clusters";
 import { ConnectClusterPage } from "./routes/connect-cluster";
 import { ClusterDetailPage } from "./routes/cluster-detail";
-
-// Placeholder for pages built in later stages, so the nav never 404s.
-function Placeholder({ title, stage }: { title: string; stage: string }) {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold tracking-tight">{title}</h1>
-      <p className="text-muted-foreground">Built in {stage}.</p>
-    </div>
-  );
-}
+import { RecommendationsPage } from "./routes/recommendations";
 
 export function App() {
   return (
@@ -33,7 +24,7 @@ export function App() {
         <Route path="/clusters" element={<ClustersPage />} />
         <Route path="/clusters/new" element={<ConnectClusterPage />} />
         <Route path="/clusters/:id" element={<ClusterDetailPage />} />
-        <Route path="/recommendations" element={<Placeholder title="Recommendations" stage="Stage H" />} />
+        <Route path="/recommendations" element={<RecommendationsPage />} />
       </Route>
     </Routes>
   );

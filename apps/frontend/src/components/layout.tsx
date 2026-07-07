@@ -1,8 +1,9 @@
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { LayoutDashboard, Server, Lightbulb, LogOut } from "lucide-react";
+import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
+import { motion } from "framer-motion";
+import { LayoutDashboard, Server, Lightbulb, LogOut, Gauge } from "lucide-react";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/auth";
-import { Button } from "./ui/button";
+import { ThemeToggle } from "./ui/theme-toggle";
 import { cn } from "../lib/utils";
 
 const NAV = [
@@ -15,6 +16,7 @@ export function AppLayout() {
   const { user } = useAuth();
   const utils = trpc.useUtils();
   const navigate = useNavigate();
+  const location = useLocation();
   const logout = trpc.auth.logout.useMutation({
     onSuccess: async () => {
       await utils.auth.me.invalidate();
@@ -25,39 +27,60 @@ export function AppLayout() {
   return (
     <div className="flex min-h-screen">
       {/* Sidebar */}
-      <aside className="flex w-56 shrink-0 flex-col border-r border-border bg-card">
-        <div className="px-5 py-4 text-lg font-bold tracking-tight">KubePilot</div>
+      <aside className="glass sticky top-0 flex h-screen w-60 shrink-0 flex-col border-r border-border">
+        <div className="flex items-center gap-2.5 px-5 py-5">
+          <span className="grid h-8 w-8 place-items-center rounded-lg bg-gradient-primary text-primary-foreground shadow-[0_4px_16px_-4px_hsl(var(--primary)/0.6)]">
+            <Gauge size={18} />
+          </span>
+          <span className="text-lg font-bold tracking-tight">KubePilot</span>
+        </div>
+
         <nav className="flex flex-1 flex-col gap-1 px-3">
-          {NAV.map(({ to, label, icon: Icon, end }) => (
-            <NavLink
-              key={to}
-              to={to}
-              end={end}
-              className={({ isActive }) =>
-                cn(
-                  "flex items-center gap-3 rounded-md px-3 py-2 text-sm font-medium transition-colors",
-                  isActive ? "bg-primary/10 text-primary" : "text-muted-foreground hover:bg-muted",
-                )
-              }
-            >
-              <Icon size={16} />
-              {label}
-            </NavLink>
-          ))}
+          {NAV.map(({ to, label, icon: Icon, end }) => {
+            const active = end ? location.pathname === to : location.pathname.startsWith(to);
+            return (
+              <NavLink
+                key={to}
+                to={to}
+                end={end}
+                className={cn(
+                  "relative flex items-center gap-3 rounded-lg px-3 py-2 text-sm font-medium transition-colors",
+                  active ? "text-primary" : "text-muted-foreground hover:bg-muted hover:text-foreground",
+                )}
+              >
+                {active && (
+                  <motion.span
+                    layoutId="nav-active"
+                    className="absolute inset-0 rounded-lg bg-primary/10 ring-1 ring-inset ring-primary/20"
+                    transition={{ type: "spring", stiffness: 400, damping: 32 }}
+                  />
+                )}
+                <Icon size={16} className="relative z-10" />
+                <span className="relative z-10">{label}</span>
+              </NavLink>
+            );
+          })}
         </nav>
-        <div className="border-t border-border p-3 text-xs text-muted-foreground">
-          <div className="px-2 pb-2">
-            <div className="font-medium text-foreground">{user?.role}</div>
-            <div>tenant: {user?.tenantId?.slice(0, 8)}…</div>
+
+        <div className="m-3 rounded-xl border border-border bg-elevated/50 p-3">
+          <div className="flex items-center justify-between">
+            <div className="min-w-0">
+              <div className="truncate text-sm font-medium capitalize">{user?.role ?? "—"}</div>
+              <div className="truncate text-xs text-muted-foreground">tenant {user?.tenantId?.slice(0, 8)}…</div>
+            </div>
+            <ThemeToggle />
           </div>
-          <Button variant="ghost" size="sm" className="w-full justify-start" onClick={() => logout.mutate()}>
+          <button
+            onClick={() => logout.mutate()}
+            className="mt-2 flex w-full items-center gap-2 rounded-lg px-2 py-1.5 text-sm text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+          >
             <LogOut size={14} /> Sign out
-          </Button>
+          </button>
         </div>
       </aside>
 
       {/* Main content */}
-      <main className="flex-1 overflow-auto">
+      <main className="scroll-slim flex-1 overflow-auto">
         <div className="mx-auto max-w-6xl p-8">
           <Outlet />
         </div>

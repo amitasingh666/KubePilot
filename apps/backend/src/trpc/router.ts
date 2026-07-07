@@ -3,6 +3,7 @@ import { authRouter } from "./routers/auth.js";
 import { clustersRouter } from "./routers/clusters.js";
 import { costRouter } from "./routers/cost.js";
 import { utilizationRouter } from "./routers/utilization.js";
+import { recommendationsRouter } from "./routers/recommendations.js";
 
 /**
  * Root API router. Feature routers (clusters, cost, recommendations,
@@ -19,6 +20,7 @@ export const appRouter = router({
   clusters: clustersRouter,
   cost: costRouter,
   utilization: utilizationRouter,
+  recommendations: recommendationsRouter,
 });
 
 /** The type the frontend imports for end-to-end type safety (no codegen). */
