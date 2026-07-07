@@ -160,12 +160,14 @@ model Workload {
   gitopsOwned       Boolean           @default(false)  @map("gitops_owned")
   gitopsSource      Json?             @map("gitops_source")
   labels            Json?
+  podLabels         Json?             @map("pod_labels")
   specHash          String?           @map("spec_hash")
   lastSeenAt        DateTime          @default(now()) @map("last_seen_at")
   archivedAt        DateTime?         @map("archived_at")
   containers ContainerSpec[]
   revisions  WorkloadRevision[]
   constraint SchedulingConstraint?
+  recommendations Recommendation[]
 
   cluster Cluster @relation(fields: [clusterId], references: [id], onDelete: Cascade)
 
@@ -390,4 +392,26 @@ model StabilityEvent {
   @@index([tenantId])
   @@index([workloadId, ts])
   @@map("stability_event")
+}
+model Recommendation {
+  id            String    @id @default(uuid()) @db.Uuid
+  tenantId      String    @map("tenant_id") @db.Uuid
+  workloadId    String    @map("workload_id") @db.Uuid
+  type          String                                  // cpu-rightsize | memory-rightsize
+  resource      String                                  // cpu | memory
+  unit          String                                  // millicores | bytes
+  currentValue  BigInt    @map("current_value")         // BigInt holds both millicores and bytes
+  proposedValue BigInt    @map("proposed_value")
+  savings       BigInt
+  confidence    String                                  // low | high
+  status        String    @default("open")              // open | applied | dismissed
+  rationale     String
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime? @updatedAt @map("updated_at")
+
+  workload Workload @relation(fields: [workloadId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId])
+  @@index([workloadId])
+  @@map("recommendation")
 }

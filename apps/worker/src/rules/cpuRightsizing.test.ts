@@ -10,6 +10,7 @@ function input(over: Partial<AnalysisInput> = {}): AnalysisInput {
     name: "checkout",
     kind: "deployment",
     managedBy: "none",
+    pdbMinReplicas: null,
     replicas: 3,
     cpuRequestM: 500,
     memRequestBytes: null,

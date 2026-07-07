@@ -18,7 +18,7 @@ const noAutoscalers = new Map<string, string>();
 
 describe("toWorkload", () => {
   it("maps a Deployment with summed resources", () => {
-    const wl = toWorkload(meta as any, podSpec as any, "deployment", 3, noAutoscalers);
+    const wl = toWorkload(meta as any, { spec: podSpec } as any, "deployment", 3, noAutoscalers);
     expect(wl.name).toBe("checkout");
     expect(wl.namespace).toBe("shop");
     expect(wl.kind).toBe("deployment");
@@ -31,17 +31,17 @@ describe("toWorkload", () => {
   });
 
   it("carries the given kind (Fix 1: DaemonSet/StatefulSet now supported)", () => {
-    expect(toWorkload(meta as any, podSpec as any, "daemonset", null, noAutoscalers).kind).toBe("daemonset");
-    expect(toWorkload(meta as any, podSpec as any, "statefulset", 2, noAutoscalers).kind).toBe("statefulset");
+    expect(toWorkload(meta as any, { spec: podSpec } as any, "daemonset", null, noAutoscalers).kind).toBe("daemonset");
+    expect(toWorkload(meta as any, { spec: podSpec } as any, "statefulset", 2, noAutoscalers).kind).toBe("statefulset");
   });
 
   it("builds the managedBy key from the real kind, not a hardcoded 'deployment' (regression)", () => {
     // Pre-fix the key was always `${ns}/deployment/${name}`, so a StatefulSet's
     // autoscaler would never match. It must key on the actual kind now.
     const map = new Map<string, string>([["shop/statefulset/checkout", "hpa"]]);
-    expect(toWorkload(meta as any, podSpec as any, "statefulset", 2, map).managedBy).toBe("hpa");
+    expect(toWorkload(meta as any, { spec: podSpec } as any, "statefulset", 2, map).managedBy).toBe("hpa");
     // A deployment with the same name must NOT pick up the statefulset's autoscaler.
-    expect(toWorkload(meta as any, podSpec as any, "deployment", 3, map).managedBy).toBe("none");
+    expect(toWorkload(meta as any, { spec: podSpec } as any, "deployment", 3, map).managedBy).toBe("none");
   });
 
   it("sums resources across multiple containers", () => {
@@ -51,8 +51,15 @@ describe("toWorkload", () => {
         { name: "b", resources: { requests: { cpu: "150m", memory: "50Mi" } } },
       ],
     };
-    const wl = toWorkload(meta as any, twoContainers as any, "deployment", 1, noAutoscalers);
+    const wl = toWorkload(meta as any, { spec: twoContainers } as any, "deployment", 1, noAutoscalers);
     expect(wl.resources.cpuRequestMillicores).toBe(250);
     expect(wl.resources.memRequestBytes).toBe(150 * 1024 * 1024);
+  });
+
+  it("captures pod-TEMPLATE labels (what PDBs select on), separate from workload labels", () => {
+    const template = { metadata: { labels: { app: "checkout", tier: "web" } }, spec: podSpec };
+    const wl = toWorkload(meta as any, template as any, "deployment", 3, noAutoscalers);
+    expect(wl.podLabels).toEqual({ app: "checkout", tier: "web" });
+    expect(wl.labels).toEqual({ app: "checkout" }); // workload's own labels (from meta), unchanged
   });
 });

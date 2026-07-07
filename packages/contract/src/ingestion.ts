@@ -99,6 +99,8 @@ export const WorkloadInventory = z.object({
   gitopsOwned: z.boolean().default(false),
   gitopsSource: z.record(z.string(), z.unknown()).nullish(),
   labels: z.record(z.string(), z.string()).default({}),
+  /** Pod-TEMPLATE labels (spec.template.metadata.labels) — what PDBs/Services select on. Optional for backward-compat. */
+  podLabels: z.record(z.string(), z.string()).nullish(),
   constraints: SchedulingConstraint.nullish(),
 });
 export type WorkloadInventory = z.infer<typeof WorkloadInventory>;

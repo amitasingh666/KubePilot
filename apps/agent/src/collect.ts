@@ -100,11 +100,12 @@ function toSchedulingConstraint(spec?: V1PodSpec): SchedulingConstraint | null {
 // where `replicas` comes from differ, so the caller passes those in.
 export function toWorkload(
     meta: V1ObjectMeta | undefined,
-    podSpec: V1PodSpec | undefined,
+    template: { metadata?: V1ObjectMeta; spec?: V1PodSpec } | undefined,
     kind: WorkloadKind,
     replicas: number | null,
     managedByMap: Map<string, string>,
 ): WorkloadInventory {
+    const podSpec = template?.spec;
     const containers = podSpec?.containers ?? [];
     // Build the per-container specs once, then reuse for both the container list
     // and the workload-level aggregate.
@@ -118,6 +119,8 @@ export function toWorkload(
         namespace,
         kind,
         labels: meta?.labels ?? {},
+        // Pod-template labels — what PDBs and Services select on (differs from the workload's own labels).
+        podLabels: template?.metadata?.labels ?? {},
         replicas,
         containers: specs,
         managedBy: managedByMap.get(key) ?? "none",
@@ -144,11 +147,11 @@ export async function collectWorkloads(apps: AppsV1Api,  managedByMap: Map<strin
     ]);
     return [
         ...deployments.items.map((d: V1Deployment) =>
-            toWorkload(d.metadata, d.spec?.template?.spec, "deployment", d.spec?.replicas ?? null, managedByMap)),
+            toWorkload(d.metadata, d.spec?.template, "deployment", d.spec?.replicas ?? null, managedByMap)),
         ...daemonsets.items.map((ds: V1DaemonSet) =>
-            toWorkload(ds.metadata, ds.spec?.template?.spec, "daemonset", ds.status?.desiredNumberScheduled ?? null, managedByMap)),
+            toWorkload(ds.metadata, ds.spec?.template, "daemonset", ds.status?.desiredNumberScheduled ?? null, managedByMap)),
         ...statefulsets.items.map((s: V1StatefulSet) =>
-            toWorkload(s.metadata, s.spec?.template?.spec, "statefulset", s.spec?.replicas ?? null, managedByMap)),
+            toWorkload(s.metadata, s.spec?.template, "statefulset", s.spec?.replicas ?? null, managedByMap)),
     ];
 }
 
@@ -182,21 +185,39 @@ export function buildManagedByMap(autoscalers: AutoscalerInventory[]): Map<strin
     return m;
 }
 
-export function toPvcInventory(p: V1PersistentVolumeClaim): PvcInventory {
+// Build the set of "namespace/claimName" that some pod actually mounts, so we can
+// tell mounted PVCs from orphaned (bound-but-unused) ones. Keyed by namespace
+// because PVC names are only unique within a namespace.
+export async function collectMountedClaims(core: CoreV1Api): Promise<Set<string>> {
+    const res = await core.listPodForAllNamespaces();
+    const mounted = new Set<string>();
+    for (const pod of res.items) {
+        const ns = pod.metadata?.namespace ?? "";
+        for (const vol of pod.spec?.volumes ?? []) {
+            const claim = vol.persistentVolumeClaim?.claimName;
+            if (claim) mounted.add(`${ns}/${claim}`);
+        }
+    }
+    return mounted;
+}
+
+export function toPvcInventory(p: V1PersistentVolumeClaim, mountedClaims: Set<string>): PvcInventory {
     const cap = p.status?.capacity?.storage ?? p.spec?.resources?.requests?.storage;
+    const namespace = p.metadata?.namespace ?? "";
+    const name = p.metadata?.name ?? "";
     return {
-      namespace: p.metadata?.namespace ?? "",
-      name: p.metadata?.name ?? "",
+      namespace,
+      name,
       storageClass: p.spec?.storageClassName ?? null,
       capacityBytes: memToBytes(cap) ?? null,   // storage uses the same Ki/Mi/Gi suffixes
       volumeType: null,
       bound: p.status?.phase === "Bound",
-      mounted: null,                            // needs pod cross-ref; leave null for now
+      mounted: mountedClaims.has(`${namespace}/${name}`),
     };
 }
-export async function collectPvcs(core: CoreV1Api): Promise<PvcInventory[]> {
+export async function collectPvcs(core: CoreV1Api, mountedClaims: Set<string>): Promise<PvcInventory[]> {
     const res = await core.listPersistentVolumeClaimForAllNamespaces();
-    return res.items.map(toPvcInventory);
+    return res.items.map((p) => toPvcInventory(p, mountedClaims));
 }
   
 export function toServiceInventory(s: V1Service): ServiceInventory {
@@ -243,13 +264,14 @@ export async function collectInventorySnapshot(
 
     const autoscalers = await collectAutoscalers(autoscaling);
     const managedBy = buildManagedByMap(autoscalers);
+    const mountedClaims = await collectMountedClaims(core); // for PVC mounted/orphaned detection
 
     const inventory = {
         nodes: await collectNodes(core),
         workloads: await collectWorkloads(apps, managedBy),
         autoscalers,
         pdbs: await collectPdbs(policy),
-        pvcs: await collectPvcs(core),
+        pvcs: await collectPvcs(core, mountedClaims),
         services: await collectServices(core),
     };
 

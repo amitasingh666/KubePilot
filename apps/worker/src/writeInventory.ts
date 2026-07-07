@@ -90,6 +90,7 @@ export async function writeInventory(
       gitopsOwned: w.gitopsOwned,
       gitopsSource: jsonOrNull(w.gitopsSource),
       labels: jsonOrNull(w.labels),
+      podLabels: jsonOrNull(w.podLabels),
       specHash,
       lastSeenAt: new Date(),
     };

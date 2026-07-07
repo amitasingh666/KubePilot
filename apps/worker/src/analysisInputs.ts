@@ -16,6 +16,8 @@ export type AnalysisInput = {
   kind: string;
   managedBy: string;
   replicas: number | null;
+  // Highest integer PDB minAvailable that selects this workload's pods (null = none). Floor for replica cuts.
+  pdbMinReplicas: number | null;
   // current spec (what's reserved)
   cpuRequestM: number | null;
   memRequestBytes: number | null;
@@ -77,6 +79,22 @@ async function loadUsageByWorkload(
   return map;
 }
 
+// Does a PDB selector's matchLabels match a workload's pod labels? (matchExpressions
+// aren't evaluated in v1 — a PDB using only expressions won't be matched.)
+function selectorMatches(selector: unknown, podLabels: Record<string, string>): boolean {
+  const ml = (selector as { matchLabels?: Record<string, string> } | null)?.matchLabels;
+  if (!ml || Object.keys(ml).length === 0) return false; // empty/absent → don't over-apply
+  return Object.entries(ml).every(([k, v]) => podLabels[k] === v);
+}
+
+// Parse an integer PDB minAvailable ("2" → 2). Percentages ("50%") need replica
+// context we skip in v1, so they return null.
+function pdbMinInt(minAvailable: string | null): number | null {
+  if (!minAvailable || minAvailable.endsWith("%")) return null;
+  const n = Number(minAvailable);
+  return Number.isInteger(n) && n >= 0 ? n : null;
+}
+
 /** Build per-workload analysis inputs for a tenant, with sufficiency verdicts. */
 export async function buildAnalysisInputs(
   prisma: PrismaClient,
@@ -86,11 +104,13 @@ export async function buildAnalysisInputs(
     where: { tenantId },
     select: {
       id: true,
+      clusterId: true,
       namespace: true,
       name: true,
       kind: true,
       managedBy: true,
       replicas: true,
+      podLabels: true,
       cpuRequestM: true,
       memRequestBytes: true,
       cpuLimitM: true,
@@ -99,10 +119,23 @@ export async function buildAnalysisInputs(
   });
 
   const usage = await loadUsageByWorkload(prisma, tenantId);
+  const pdbs = await prisma.podDisruptionBudget.findMany({
+    where: { tenantId },
+    select: { clusterId: true, namespace: true, minAvailable: true, selector: true },
+  });
 
   return workloads.map((w) => {
     const u = usage.get(w.id);
     const days = u?.days ?? 0;
+    const podLabels = (w.podLabels ?? {}) as Record<string, string>;
+    // Most-restrictive integer PDB minAvailable among PDBs (same cluster+ns) selecting these pods.
+    let pdbMinReplicas: number | null = null;
+    for (const pdb of pdbs) {
+      if (pdb.clusterId !== w.clusterId || pdb.namespace !== w.namespace) continue;
+      if (!selectorMatches(pdb.selector, podLabels)) continue;
+      const m = pdbMinInt(pdb.minAvailable);
+      if (m != null) pdbMinReplicas = pdbMinReplicas == null ? m : Math.max(pdbMinReplicas, m);
+    }
     return {
       workloadId: w.id,
       namespace: w.namespace,
@@ -110,6 +143,7 @@ export async function buildAnalysisInputs(
       kind: w.kind,
       managedBy: w.managedBy,
       replicas: w.replicas,
+      pdbMinReplicas,
       cpuRequestM: w.cpuRequestM,
       memRequestBytes: w.memRequestBytes == null ? null : Number(w.memRequestBytes),
       cpuLimitM: w.cpuLimitM,

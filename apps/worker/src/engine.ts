@@ -2,9 +2,21 @@
 import { Worker, Queue } from "bullmq";
 import { Redis } from "ioredis";
 import { getRootClient } from "@kubepilot/db";
-import { buildAnalysisInputs } from "./analysisInputs.js";
-import { cpuRightsizing, type Recommendation } from "./rules/cpuRightsizing.js";
-import { memoryRightsizing, type MemRecommendation } from "./rules/memoryRightsizing.js";
+import { buildAnalysisInputs, type AnalysisInput } from "./analysisInputs.js";
+import { cpuRightsizing } from "./rules/cpuRightsizing.js";
+import { memoryRightsizing } from "./rules/memoryRightsizing.js";
+import { replicaOptimization } from "./rules/replicaOptimization.js";
+import { unusedCleanup } from "./rules/unusedCleanup.js";
+import { persistRecommendations, type AnyRecommendation } from "./persistRecommendations.js";
+
+// The rule registry: each takes one workload's inputs and returns a rec or null.
+// Add a new rule → add it here; nothing else in the engine changes.
+const RULES: Array<(w: AnalysisInput) => AnyRecommendation | null> = [
+  cpuRightsizing,
+  memoryRightsizing,
+  replicaOptimization,
+  unusedCleanup,
+];
 
 const redisUrl = process.env.REDIS_QUEUE_URL;
 if (!redisUrl) throw new Error("REDIS_QUEUE_URL is not set");
@@ -36,19 +48,18 @@ const engineWorker = new Worker(
         if (job.name === "analyze-tenant") {
             const { tenantId } = job.data as { tenantId: string };
             const inputs = await buildAnalysisInputs(prisma, tenantId);
-            const cpuRecs = inputs
-                .map(cpuRightsizing)
-                .filter((r): r is Recommendation => r !== null);
-            const memRecs = inputs
-                .map(memoryRightsizing)
-                .filter((r): r is MemRecommendation => r !== null);
-            console.log(
-                `tenant ${tenantId}: ${inputs.length} workloads → ` +
-                    `${cpuRecs.length} CPU + ${memRecs.length} memory rightsizing recs`,
+            const recs = RULES.flatMap((rule) => inputs.map(rule)).filter(
+                (r): r is AnyRecommendation => r !== null,
             );
-            for (const r of [...cpuRecs, ...memRecs]) {
-                console.log(`  • ${r.namespace}/${r.name}: ${r.rationale}`);
-            }
+            const n = await persistRecommendations(prisma, tenantId, recs);
+            const byType = recs.reduce<Record<string, number>>((acc, r) => {
+                acc[r.type] = (acc[r.type] ?? 0) + 1;
+                return acc;
+            }, {});
+            console.log(
+                `tenant ${tenantId}: ${inputs.length} workloads → persisted ${n} recommendations`,
+                byType,
+            );
             return;
         }
     },
