@@ -1,3 +1,4 @@
+/// <reference types="@fastify/cookie" />
 import { z } from "zod";
 import { TRPCError } from "@trpc/server";
 import { router, publicProcedure, protectedProcedure } from "../trpc.js";

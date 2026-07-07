@@ -1,3 +1,4 @@
+/// <reference types="@fastify/cookie" />
 import type { CreateFastifyContextOptions } from "@trpc/server/adapters/fastify";
 import { getRootClient } from "@kubepilot/db";
 import { getSession, SESSION_COOKIE } from "../auth/session.js";
