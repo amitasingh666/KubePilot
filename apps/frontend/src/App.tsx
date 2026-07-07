@@ -3,6 +3,8 @@ import { RequireAuth } from "./lib/auth";
 import { AppLayout } from "./components/layout";
 import { LoginPage } from "./routes/login";
 import { OverviewPage } from "./routes/overview";
+import { ClustersPage } from "./routes/clusters";
+import { ConnectClusterPage } from "./routes/connect-cluster";
 
 // Placeholder for pages built in later stages, so the nav never 404s.
 function Placeholder({ title, stage }: { title: string; stage: string }) {
@@ -27,7 +29,8 @@ export function App() {
         }
       >
         <Route index element={<OverviewPage />} />
-        <Route path="/clusters" element={<Placeholder title="Clusters" stage="Stage E / G" />} />
+        <Route path="/clusters" element={<ClustersPage />} />
+        <Route path="/clusters/new" element={<ConnectClusterPage />} />
         <Route path="/recommendations" element={<Placeholder title="Recommendations" stage="Stage H" />} />
       </Route>
     </Routes>

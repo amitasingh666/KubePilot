@@ -1,5 +1,6 @@
 import { router, publicProcedure } from "./trpc.js";
 import { authRouter } from "./routers/auth.js";
+import { clustersRouter } from "./routers/clusters.js";
 
 /**
  * Root API router. Feature routers (clusters, cost, recommendations,
@@ -13,6 +14,7 @@ export const appRouter = router({
     ts: new Date(),
   })),
   auth: authRouter,
+  clusters: clustersRouter,
 });
 
 /** The type the frontend imports for end-to-end type safety (no codegen). */
