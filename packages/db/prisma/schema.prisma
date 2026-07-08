@@ -55,22 +55,44 @@ model Tenant {
   memberships    Membership[]
   clusters       Cluster[]
   priceOverrides PriceOverride[]
+  invites        Invite[]
 
   @@map("tenant")
 }
 
 model AppUser {
-  id         String    @id @default(uuid()) @db.Uuid
-  email      String    @unique
-  name       String?
-  idpSubject String?   @map("idp_subject")
-  status     String    @default("active")
+  id           String    @id @default(uuid()) @db.Uuid
+  email        String    @unique
+  name         String?
+  passwordHash String?   @map("password_hash")   // bcrypt; null = no password set yet (invited/OIDC)
+  idpSubject   String?   @map("idp_subject")
+  status       String    @default("active")
   createdAt  DateTime  @default(now()) @map("created_at")
   updatedAt  DateTime? @updatedAt @map("updated_at")
 
   memberships Membership[]
 
   @@map("app_user")
+}
+
+// Phase 4b — pending invitation for an employee to join a company. The invitee
+// accepts via a tokenized link and sets their own password (see auth.acceptInvite).
+model Invite {
+  id          String    @id @default(uuid()) @db.Uuid
+  tenantId    String    @map("tenant_id") @db.Uuid
+  email       String
+  role        UserRole  @default(viewer)
+  tokenHash   String    @unique @map("token_hash")   // only the hash is stored
+  invitedById String?   @map("invited_by_id") @db.Uuid
+  status      String    @default("pending")          // pending | accepted | revoked
+  expiresAt   DateTime  @map("expires_at")
+  acceptedAt  DateTime? @map("accepted_at")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  tenant Tenant @relation(fields: [tenantId], references: [id], onDelete: Cascade)
+
+  @@index([tenantId, status])
+  @@map("invite")
 }
 
 model Membership {

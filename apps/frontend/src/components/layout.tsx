@@ -1,16 +1,17 @@
 import { NavLink, Outlet, useNavigate, useLocation } from "react-router-dom";
 import { motion } from "framer-motion";
-import { LayoutDashboard, Server, Lightbulb, FileText, LogOut, Gauge } from "lucide-react";
+import { LayoutDashboard, Server, Lightbulb, FileText, Users, LogOut, Gauge } from "lucide-react";
 import { trpc } from "../lib/trpc";
 import { useAuth } from "../lib/auth";
 import { ThemeToggle } from "./ui/theme-toggle";
 import { cn } from "../lib/utils";
 
 const NAV = [
-  { to: "/", label: "Overview", icon: LayoutDashboard, end: true },
-  { to: "/clusters", label: "Clusters", icon: Server, end: false },
-  { to: "/recommendations", label: "Recommendations", icon: Lightbulb, end: false },
-  { to: "/reports", label: "Reports", icon: FileText, end: false },
+  { to: "/app", label: "Overview", icon: LayoutDashboard, end: true },
+  { to: "/app/clusters", label: "Clusters", icon: Server, end: false },
+  { to: "/app/recommendations", label: "Recommendations", icon: Lightbulb, end: false },
+  { to: "/app/reports", label: "Reports", icon: FileText, end: false },
+  { to: "/app/team", label: "Team", icon: Users, end: false },
 ];
 
 export function AppLayout() {

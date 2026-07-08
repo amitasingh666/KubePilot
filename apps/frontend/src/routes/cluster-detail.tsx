@@ -38,7 +38,7 @@ export function ClusterDetailPage() {
   return (
     <motion.div variants={stagger} initial="hidden" animate="show" className="flex flex-col gap-6">
       <motion.div variants={fadeUp}>
-        <Link to="/clusters" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
+        <Link to="/app/clusters" className="mb-2 inline-flex items-center gap-1 text-sm text-muted-foreground transition-colors hover:text-foreground">
           <ArrowLeft size={14} /> Clusters
         </Link>
         <div className="flex items-center gap-3">

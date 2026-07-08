@@ -1,8 +1,9 @@
 import { getRootClient } from "@kubepilot/db";
 import type { SessionUser } from "../trpc/context.js";
+import { verifyPassword } from "./password.js";
 
-/** What a login attempt carries. Dev: just an email (+ optional tenant to pick). */
-export type LoginInput = { email: string; tenantSlug?: string };
+/** What a login attempt carries. */
+export type LoginInput = { email: string; password: string; tenantSlug?: string };
 
 /**
  * Auth is behind this interface so the mechanism can be swapped without touching
@@ -16,23 +17,26 @@ export interface AuthProvider {
 }
 
 /**
- * Dev provider: trusts the email (NO password — local dev only) and resolves it
- * against the seeded app_user + membership rows. If the user belongs to multiple
- * tenants, `tenantSlug` selects one; otherwise the first membership is used.
+ * Password provider: verifies email + password against the bcrypt hash on the
+ * user, then resolves their membership. If the user belongs to multiple tenants,
+ * `tenantSlug` selects one; otherwise the first membership is used. Swap for an
+ * OidcProvider behind this same interface when real SSO lands.
  */
-export class DevAuthProvider implements AuthProvider {
-  async authenticate({ email, tenantSlug }: LoginInput): Promise<SessionUser | null> {
+export class PasswordAuthProvider implements AuthProvider {
+  async authenticate({ email, password, tenantSlug }: LoginInput): Promise<SessionUser | null> {
     const prisma = getRootClient();
     const user = await prisma.appUser.findUnique({
       where: { email },
       select: {
         id: true,
+        passwordHash: true,
         memberships: {
           select: { tenantId: true, role: true, tenant: { select: { slug: true } } },
         },
       },
     });
-    if (!user || user.memberships.length === 0) return null;
+    if (!user || !user.passwordHash || user.memberships.length === 0) return null;
+    if (!(await verifyPassword(password, user.passwordHash))) return null;
 
     const m = tenantSlug
       ? user.memberships.find((x) => x.tenant.slug === tenantSlug)
@@ -43,5 +47,4 @@ export class DevAuthProvider implements AuthProvider {
   }
 }
 
-// The active provider. Swap this line for OidcProvider when real SSO lands.
-export const authProvider: AuthProvider = new DevAuthProvider();
+export const authProvider: AuthProvider = new PasswordAuthProvider();

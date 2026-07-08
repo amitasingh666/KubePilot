@@ -1,11 +1,15 @@
 import { PrismaClient } from "@prisma/client";
+import bcrypt from "bcryptjs";
 
 /**
  * Seed two tenants with users, memberships, and clusters.
  * Runs as the SUPERUSER (DATABASE_URL). Tenant isolation is enforced at the
  * application layer (queries filter by tenantId); there is no DB-level RLS.
+ *
+ * Dev password for all seeded users: "demo1234".
  */
 const prisma = new PrismaClient();
+const DEV_PASSWORD_HASH = bcrypt.hashSync("demo1234", 10);
 
 async function main() {
   const tenants = [
@@ -32,8 +36,8 @@ async function main() {
 
     const user = await prisma.appUser.upsert({
       where: { email: t.user.email },
-      update: { name: t.user.name },
-      create: { email: t.user.email, name: t.user.name },
+      update: { name: t.user.name, passwordHash: DEV_PASSWORD_HASH },
+      create: { email: t.user.email, name: t.user.name, passwordHash: DEV_PASSWORD_HASH },
     });
 
     await prisma.membership.upsert({

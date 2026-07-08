@@ -1,21 +1,27 @@
 import { useState, type FormEvent } from "react";
-import { useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { motion } from "framer-motion";
 import { Gauge } from "lucide-react";
 import { trpc } from "../lib/trpc";
+import { useAuth } from "../lib/auth";
 import { Button } from "../components/ui/button";
 import { Card, CardContent } from "../components/ui/card";
 
 export function LoginPage() {
   const [email, setEmail] = useState("owner@acme.test");
+  const [password, setPassword] = useState("");
   const navigate = useNavigate();
+  const { user, isLoading } = useAuth();
   const utils = trpc.useUtils();
   const login = trpc.auth.login.useMutation({
     onSuccess: async () => {
       await utils.auth.me.invalidate();
-      navigate("/");
+      navigate("/app");
     },
   });
+
+  // Already signed in → straight to the app.
+  if (!isLoading && user) return <Navigate to="/app" replace />;
 
   return (
     <div className="relative flex min-h-screen items-center justify-center overflow-hidden p-4">
@@ -42,7 +48,7 @@ export function LoginPage() {
 
         <Card>
           <CardContent className="p-6">
-            <form onSubmit={(e: FormEvent) => { e.preventDefault(); login.mutate({ email }); }} className="flex flex-col gap-3">
+            <form onSubmit={(e: FormEvent) => { e.preventDefault(); login.mutate({ email, password }); }} className="flex flex-col gap-3">
               <label className="text-xs font-medium text-muted-foreground">Email</label>
               <input
                 type="email"
@@ -52,11 +58,23 @@ export function LoginPage() {
                 className="h-10 rounded-lg border border-border bg-background/60 px-3 text-sm transition-colors focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
                 required
               />
+              <label className="text-xs font-medium text-muted-foreground">Password</label>
+              <input
+                type="password"
+                value={password}
+                onChange={(e) => setPassword(e.target.value)}
+                placeholder="••••••••"
+                className="h-10 rounded-lg border border-border bg-background/60 px-3 text-sm transition-colors focus-visible:border-primary/50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring/40"
+                required
+              />
               <Button type="submit" size="lg" disabled={login.isPending} className="mt-1">
                 {login.isPending ? "Signing in…" : "Sign in"}
               </Button>
               {login.error && <p className="text-sm text-destructive">{login.error.message}</p>}
-              <p className="mt-1 text-center text-xs text-muted-foreground">Dev login — try owner@acme.test</p>
+              <p className="mt-2 text-center text-sm text-muted-foreground">
+                New company? <Link to="/register" className="text-primary hover:underline">Register</Link>
+              </p>
+              <p className="text-center text-xs text-muted-foreground">Dev: owner@acme.test / demo1234</p>
             </form>
           </CardContent>
         </Card>

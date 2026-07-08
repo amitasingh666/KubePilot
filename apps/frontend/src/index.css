@@ -2,8 +2,10 @@
 @tailwind components;
 @tailwind utilities;
 
-/* ── Design tokens — dark-first FinOps palette (emerald-teal accent) ────────── */
-.dark {
+/* ── Design tokens — dark-first FinOps palette (emerald-teal accent) ──────────
+   Dark uses `:root.dark` (specificity 0,2,0) so it always beats the `:root`
+   light defaults (0,1,0) regardless of source order — the toggle relies on this. */
+:root.dark {
   --background: 224 30% 6%;
   --surface: 223 26% 9%;
   --card: 223 24% 10%;

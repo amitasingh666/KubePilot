@@ -21,7 +21,7 @@ export function ClustersPage() {
           <h1 className="text-2xl font-bold tracking-tight">Clusters</h1>
           <p className="text-muted-foreground">Connected Kubernetes clusters and their health.</p>
         </div>
-        <Link to="/clusters/new" className={buttonVariants()}>
+        <Link to="/app/clusters/new" className={buttonVariants()}>
           <Plus size={16} /> Connect cluster
         </Link>
       </motion.div>
@@ -35,7 +35,7 @@ export function ClustersPage() {
           <Card className="flex flex-col items-center gap-3 p-12 text-center">
             <span className="grid h-12 w-12 place-items-center rounded-xl bg-muted text-muted-foreground"><Server /></span>
             <p className="text-muted-foreground">No clusters yet. Connect one to start seeing cost & recommendations.</p>
-            <Link to="/clusters/new" className={buttonVariants()}>Connect your first cluster</Link>
+            <Link to="/app/clusters/new" className={buttonVariants()}>Connect your first cluster</Link>
           </Card>
         </motion.div>
       )}
@@ -58,7 +58,7 @@ export function ClustersPage() {
                 {clusters.data.map((c) => (
                   <tr key={c.id} className="border-b border-border/60 transition-colors last:border-0 hover:bg-muted/40">
                     <td className="p-4">
-                      <Link to={`/clusters/${c.id}`} className="font-medium text-primary hover:underline">{c.name}</Link>
+                      <Link to={`/app/clusters/${c.id}`} className="font-medium text-primary hover:underline">{c.name}</Link>
                     </td>
                     <td className="p-4"><Badge tone={STATUS_TONE[c.status] ?? "gray"}>{c.status}</Badge></td>
                     <td className="p-4 text-muted-foreground">{c.region ?? "—"}</td>
