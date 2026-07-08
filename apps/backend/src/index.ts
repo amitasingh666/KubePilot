@@ -11,8 +11,18 @@ import { Snapshot } from "@kubepilot/contract";
 import { Queue } from "bullmq";
 import { appRouter } from "./trpc/router.js";
 import { createContext } from "./trpc/context.js";
+import { incr, renderMetrics } from "./metrics.js";
 
 const app = Fastify({ logger: true });
+
+// Self-observability: count every response by route + status (Prometheus).
+app.addHook("onResponse", async (req, reply) => {
+  incr("http_requests_total", {
+    method: req.method,
+    route: req.routeOptions?.url ?? "unknown",
+    status: String(reply.statusCode),
+  });
+});
 
 // Dashboard API (user-facing) — tRPC under /trpc, with CORS for the SPA.
 // The agent-facing routes below (/ingest, token auth) stay separate.
@@ -38,6 +48,12 @@ const ingestionConnection = new Redis(config.REDIS_QUEUE_URL, {
 });
 
 const ingestionQueue = new Queue("ingestion", { connection: ingestionConnection });
+
+// Prometheus scrape endpoint.
+app.get("/metrics", async (_req, reply) => {
+  reply.header("content-type", "text/plain; version=0.0.4");
+  return renderMetrics();
+});
 
 // Liveness — process is up.
 app.get("/health", async () => ({

@@ -19,7 +19,7 @@ const TENANT_SCOPED = new Set<string>([
   "SchedulingConstraint", "IngestionSnapshot", "Autoscaler", "PodDisruptionBudget",
   "Pvc", "K8sService", "AgentCredential", "UsageMetricWorkload", "UsageMetricNode",
   "StabilityEvent", "Recommendation", "OptimizationPlan", "PriceOverride",
-  "CostBreakdown", "OptimizationOutcome", "Membership",
+  "CostBreakdown", "OptimizationOutcome", "AuditLog", "Membership",
 ]);
 
 // Operations that accept an arbitrary `where` → inject tenantId as a filter.

@@ -5,6 +5,7 @@ import { router, publicProcedure, protectedProcedure } from "../trpc.js";
 import { config } from "../../config.js";
 import { authProvider } from "../../auth/provider.js";
 import { createSession, destroySession, SESSION_COOKIE } from "../../auth/session.js";
+import { recordAudit } from "../../auth/audit.js";
 
 const WEEK_SECONDS = 60 * 60 * 24 * 7;
 
@@ -24,6 +25,7 @@ export const authRouter = router({
         maxAge: WEEK_SECONDS,
         secure: config.NODE_ENV === "production",
       });
+      await recordAudit({ tenantId: user.tenantId, actorId: user.id, actorEmail: input.email, action: "login", ip: ctx.req.ip });
       return { ok: true };
     }),
 
@@ -54,6 +56,7 @@ export const authRouter = router({
       await destroySession(sid);
       ctx.res.clearCookie(SESSION_COOKIE, { path: "/" });
     }
+    if (ctx.user) await recordAudit({ tenantId: ctx.user.tenantId, actorId: ctx.user.id, action: "logout", ip: ctx.req.ip });
     return { ok: true };
   }),
 });

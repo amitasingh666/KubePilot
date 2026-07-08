@@ -4,6 +4,7 @@ import { Prisma } from "@kubepilot/db";
 import { router, protectedProcedure, roleProcedure } from "../trpc.js";
 import { WRITE_ROLES } from "../../auth/rbac.js";
 import { createClusterConnection, rotateClusterToken } from "../../clusters.js";
+import { recordAudit } from "../../auth/audit.js";
 
 export const clustersRouter = router({
   /** All of the tenant's clusters, with health + scale, newest first. */
@@ -84,7 +85,9 @@ export const clustersRouter = router({
     .input(z.object({ name: z.string().min(1).max(63) }))
     .mutation(async ({ ctx, input }) => {
       try {
-        return await createClusterConnection(ctx.user.tenantId, input.name);
+        const result = await createClusterConnection(ctx.user.tenantId, input.name);
+        await recordAudit({ tenantId: ctx.user.tenantId, actorId: ctx.user.id, action: "cluster.create", targetKind: "cluster", targetId: result.clusterId, metadata: { name: input.name }, ip: ctx.req.ip });
+        return result;
       } catch (err) {
         // (tenantId, name) is unique — surface a clean conflict instead of a 500.
         if (err instanceof Prisma.PrismaClientKnownRequestError && err.code === "P2002") {
@@ -102,6 +105,8 @@ export const clustersRouter = router({
       // so one tenant can't rotate another tenant's token by guessing an id.
       const owned = await ctx.db.cluster.findFirst({ where: { id: input.id }, select: { id: true } });
       if (!owned) throw new TRPCError({ code: "NOT_FOUND", message: "cluster not found" });
-      return rotateClusterToken(input.id);
+      const result = await rotateClusterToken(input.id);
+      await recordAudit({ tenantId: ctx.user.tenantId, actorId: ctx.user.id, action: "cluster.rotateToken", targetKind: "cluster", targetId: input.id, ip: ctx.req.ip });
+      return result;
     }),
 });

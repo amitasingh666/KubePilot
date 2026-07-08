@@ -493,6 +493,24 @@ model OptimizationOutcome {
   @@map("optimization_outcome")
 }
 
+// Phase 6 — audit trail of security-sensitive actions (login, cluster
+// connections, token rotations). Append-only; read tenant-scoped.
+model AuditLog {
+  id         String   @id @default(uuid()) @db.Uuid
+  tenantId   String?  @map("tenant_id") @db.Uuid   // null for pre-tenant events
+  actorId    String?  @map("actor_id") @db.Uuid    // app_user id, if known
+  actorEmail String?  @map("actor_email")
+  action     String                                 // login | logout | cluster.create | cluster.rotateToken | …
+  targetKind String?  @map("target_kind")           // cluster | recommendation | …
+  targetId   String?  @map("target_id")
+  metadata   Json?
+  ip         String?
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  @@index([tenantId, createdAt])
+  @@map("audit_log")
+}
+
 model Recommendation {
   id              String    @id @default(uuid()) @db.Uuid
   tenantId        String    @map("tenant_id") @db.Uuid
