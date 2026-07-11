@@ -1,7 +1,8 @@
-# Container image. For local kind dev we build & `kind load` this tag.
+# Container image. Default = the published public image (customers pull this).
+# For local kind dev, override: --set image.repository=kubepilot-agent --set image.tag=dev
 image:
-  repository: kubepilot-agent
-  tag: dev
+  repository: ghcr.io/amitasingh666/agent
+  tag: latest
   pullPolicy: IfNotPresent
 
 # --- per-connection values (buildHelmInstallCommand injects clusterId/token/ingestionUrl) ---

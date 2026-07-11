@@ -6,11 +6,14 @@ export function hashToken(token: string): string {
 }
 
 // Build the one-line command a customer runs to install the agent in their cluster.
-// clusterId + token come from the connection; the ingestion URL comes from config.
+// Uses the published OCI Helm chart (its default image is the published agent image),
+// so the customer only needs helm + kubectl — no build, no registry setup.
 export function buildHelmInstallCommand(clusterId: string, token: string): string {
     const ingestionUrl = process.env.INGESTION_URL ?? "http://localhost:3001";
+    const chartRef = process.env.AGENT_CHART_REF ?? "oci://ghcr.io/amitasingh666/charts/kubepilot-agent";
+    const chartVersion = process.env.AGENT_CHART_VERSION ?? "0.1.0";
 
-    return `helm install kubepilot-agent kubepilot/agent \\
+    return `helm install kubepilot-agent ${chartRef} --version ${chartVersion} \\
   --namespace kubepilot --create-namespace \\
   --set clusterId=${clusterId} \\
   --set token=${token} \\
