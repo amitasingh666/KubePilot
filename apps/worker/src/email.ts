@@ -14,5 +14,25 @@ export class DevEmailSender implements EmailSender {
   }
 }
 
-// The active sender. Swap for a real provider (Resend/SES) in production.
-export const emailSender: EmailSender = new DevEmailSender();
+/** Production sender via Resend's HTTP API (uses global fetch — no SDK dependency). */
+export class ResendEmailSender implements EmailSender {
+  constructor(
+    private apiKey: string,
+    private from = process.env.EMAIL_FROM ?? "KubePilot <digests@kubepilot.dev>",
+  ) {}
+
+  async send(email: Email): Promise<void> {
+    const res = await fetch("https://api.resend.com/emails", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${this.apiKey}`, "content-type": "application/json" },
+      body: JSON.stringify({ from: this.from, to: email.to, subject: email.subject, html: email.html, text: email.text }),
+    });
+    if (!res.ok) throw new Error(`Resend send failed: ${res.status} ${await res.text()}`);
+  }
+}
+
+// Pick the sender from env: Resend when RESEND_API_KEY is set, else the dev logger.
+// Same interface either way, so nothing downstream changes.
+export const emailSender: EmailSender = process.env.RESEND_API_KEY
+  ? new ResendEmailSender(process.env.RESEND_API_KEY)
+  : new DevEmailSender();

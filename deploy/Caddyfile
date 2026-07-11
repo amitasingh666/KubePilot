@@ -1,0 +1,15 @@
+# Automatic HTTPS for $DOMAIN (Caddy fetches a Let's Encrypt cert on first run —
+# requires DNS pointing at this box and ports 80/443 reachable).
+# Same-origin routing: API paths → backend, everything else → the SPA.
+{$DOMAIN} {
+	encode gzip
+
+	@api path /trpc* /ingest*
+	handle @api {
+		reverse_proxy backend:3001
+	}
+
+	handle {
+		reverse_proxy web:80
+	}
+}
