@@ -46,7 +46,7 @@ export function ConnectClusterPage() {
           </CardContent>
         </Card>
 
-        <Link to="/clusters" className={buttonVariants()}>Done — view clusters</Link>
+        <Link to="/app/clusters" className={buttonVariants()}>Done — view clusters</Link>
       </motion.div>
     );
   }
