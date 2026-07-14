@@ -23,7 +23,10 @@ spec:
       serviceAccountName: kubepilot-agent
       containers:
         - name: agent
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          # Default to the chart's appVersion (an immutable, versioned image tag)
+          # so every chart release maps to exactly one image — no mutable `latest`,
+          # no stale cached images on customer nodes. Override image.tag only for dev.
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
           imagePullPolicy: {{ .Values.image.pullPolicy }}
           env:
             - name: AGENT_CLUSTER_ID

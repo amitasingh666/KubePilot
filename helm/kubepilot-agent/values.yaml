@@ -2,7 +2,9 @@
 # For local kind dev, override: --set image.repository=kubepilot-agent --set image.tag=dev
 image:
   repository: ghcr.io/amitasingh666/agent
-  tag: latest
+  # Empty → the chart uses its appVersion as the tag (immutable, per-release image).
+  # Set a value only to override (e.g. local dev). Avoid mutable tags like `latest`.
+  tag: ""
   pullPolicy: IfNotPresent
 
 # --- per-connection values (buildHelmInstallCommand injects clusterId/token/ingestionUrl) ---
