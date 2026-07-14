@@ -85,6 +85,7 @@ services:
       S3_BUCKET: kubepilot-reports
       S3_REGION: us-east-1
       RESEND_API_KEY: ${RESEND_API_KEY:-}
+      EMAIL_FROM: "${EMAIL_FROM:-KubePilot <onboarding@resend.dev>}"
     depends_on:
       postgres: { condition: service_healthy }
       redis-queue: { condition: service_healthy }
