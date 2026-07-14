@@ -64,7 +64,7 @@ export function TeamPage() {
                 <CopyButton text={inviteUrl} label="Copy link" />
               </div>
             )}
-            {inviteUrl && <p className="text-xs text-muted-foreground">Share this link with the invitee — they'll set their own password. (In production this is emailed.)</p>}
+            {inviteUrl && <p className="text-xs text-muted-foreground">We've emailed this invite link to the address above — they'll set their own password. You can also copy the link to share it directly.</p>}
           </CardContent>
         </Card>
       </motion.div>

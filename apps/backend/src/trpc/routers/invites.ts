@@ -5,6 +5,7 @@ import { config } from "../../config.js";
 import { WRITE_ROLES } from "../../auth/rbac.js";
 import { hashToken } from "../../clusters.js";
 import { recordAudit } from "../../auth/audit.js";
+import { emailSender, renderInviteEmail } from "../../email.js";
 
 const INVITE_TTL_MS = 7 * 24 * 60 * 60_000;
 
@@ -41,7 +42,28 @@ export const invitesRouter = router({
         },
       });
       await recordAudit({ tenantId: ctx.user.tenantId, actorId: ctx.user.id, action: "invite.create", metadata: { email: input.email, role: input.role }, ip: ctx.req.ip });
-      return { inviteUrl: `${config.WEB_ORIGIN}/accept-invite?token=${token}` };
+
+      const inviteUrl = `${config.WEB_ORIGIN}/accept-invite?token=${token}`;
+
+      // Email the invite to the new member. Look up the company name + inviter for the message.
+      // Never let a mail failure fail invite creation — the owner can still copy the link.
+      try {
+        const [tenant, inviter] = await Promise.all([
+          ctx.db.tenant.findUnique({ where: { id: ctx.user.tenantId }, select: { name: true } }),
+          ctx.db.appUser.findUnique({ where: { id: ctx.user.id }, select: { email: true } }),
+        ]);
+        const email = renderInviteEmail({
+          companyName: tenant?.name ?? "your team",
+          role: input.role,
+          inviteUrl,
+          invitedByEmail: inviter?.email,
+        });
+        await emailSender.send({ ...email, to: input.email });
+      } catch (err) {
+        console.error(`[invites.create] failed to send invite email to ${input.email}:`, err);
+      }
+
+      return { inviteUrl };
     }),
 
   /** Revoke a pending invite. */
