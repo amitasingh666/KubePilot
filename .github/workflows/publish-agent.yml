@@ -31,6 +31,8 @@ jobs:
           [ -z "$V" ] && V="${GITHUB_REF_NAME#v}"
           echo "version=$V" >> "$GITHUB_OUTPUT"
 
+      # QEMU lets the amd64 runner cross-build the arm64 image.
+      - uses: docker/setup-qemu-action@v3
       - uses: docker/setup-buildx-action@v3
       - uses: azure/setup-helm@v4
 
@@ -47,6 +49,10 @@ jobs:
           context: .
           file: apps/agent/Dockerfile
           push: true
+          # Multi-arch so the published image runs on Intel/AMD AND ARM clusters
+          # (Apple Silicon kind, AWS Graviton, Ampere, Raspberry Pi, etc.).
+          platforms: linux/amd64,linux/arm64
+          provenance: false
           tags: |
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/agent:${{ steps.v.outputs.version }}
             ${{ env.REGISTRY }}/${{ github.repository_owner }}/agent:latest
