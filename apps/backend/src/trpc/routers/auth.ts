@@ -9,6 +9,8 @@ import { createSession, destroySession, SESSION_COOKIE } from "../../auth/sessio
 import { recordAudit } from "../../auth/audit.js";
 import { hashPassword } from "../../auth/password.js";
 import { hashToken } from "../../clusters.js";
+import { createPendingRegistration, refreshOtp, verifyOtp } from "../../auth/otp.js";
+import { emailSender, renderOtpEmail } from "../../email.js";
 import type { SessionUser } from "../context.js";
 
 const WEEK_SECONDS = 60 * 60 * 24 * 7;
@@ -44,8 +46,9 @@ export const authRouter = router({
     }),
 
   /**
-   * Register a new COMPANY: creates the tenant + an owner user (with password) +
-   * membership, then signs them in. Employees join later via invite (not here).
+   * Step 1 of registration: validate the details, stash them (password already
+   * hashed) behind a short-lived email OTP, and email the code. No account is
+   * created yet — that happens in `verifyRegistration` once the code checks out.
    */
   register: publicProcedure
     .input(
@@ -62,23 +65,73 @@ export const authRouter = router({
         throw new TRPCError({ code: "CONFLICT", message: "that email already has an account — sign in or ask for an invite" });
       }
 
+      const passwordHash = await hashPassword(input.password);
+      const otp = await createPendingRegistration({
+        companyName: input.companyName,
+        name: input.name,
+        email: input.email,
+        passwordHash,
+      });
+
+      const email = renderOtpEmail({ otp, companyName: input.companyName });
+      await emailSender.send({ ...email, to: input.email });
+
+      return { pending: true as const, email: input.email };
+    }),
+
+  /**
+   * Step 2 of registration: check the emailed OTP, then actually create the
+   * tenant + owner user + membership and sign them in. Employees join via invite.
+   */
+  verifyRegistration: publicProcedure
+    .input(z.object({ email: z.string().email(), otp: z.string().regex(/^\d{6}$/, "enter the 6-digit code") }))
+    .mutation(async ({ input, ctx }) => {
+      const result = await verifyOtp(input.email, input.otp);
+      if (!result.ok) {
+        const message =
+          result.reason === "expired"
+            ? "this code has expired — start again to get a new one"
+            : result.reason === "too_many_attempts"
+              ? "too many incorrect attempts — start again to get a new code"
+              : "that code is incorrect";
+        throw new TRPCError({ code: result.reason === "invalid" ? "BAD_REQUEST" : "NOT_FOUND", message });
+      }
+
+      const reg = result.registration;
+      // Guard the race where the email was claimed while the code was outstanding.
+      if (await ctx.db.appUser.findUnique({ where: { email: reg.email }, select: { id: true } })) {
+        throw new TRPCError({ code: "CONFLICT", message: "that email already has an account — sign in instead" });
+      }
+
       // Unique slug from the company name.
-      let slug = slugify(input.companyName);
+      let slug = slugify(reg.companyName);
       if (await ctx.db.tenant.findUnique({ where: { slug }, select: { id: true } })) {
         slug = `${slug}-${randomBytes(2).toString("hex")}`;
       }
 
-      const passwordHash = await hashPassword(input.password);
       const { user, tenantId } = await ctx.db.$transaction(async (tx) => {
-        const tenant = await tx.tenant.create({ data: { name: input.companyName, slug } });
-        const u = await tx.appUser.create({ data: { email: input.email, name: input.name, passwordHash } });
+        const tenant = await tx.tenant.create({ data: { name: reg.companyName, slug } });
+        const u = await tx.appUser.create({ data: { email: reg.email, name: reg.name, passwordHash: reg.passwordHash } });
         await tx.membership.create({ data: { tenantId: tenant.id, userId: u.id, role: "owner" } });
         return { user: u, tenantId: tenant.id };
       });
 
       const principal: SessionUser = { id: user.id, tenantId, role: "owner" };
       await issueSession(ctx.res, principal);
-      await recordAudit({ tenantId, actorId: user.id, actorEmail: input.email, action: "register", metadata: { company: input.companyName }, ip: ctx.req.ip });
+      await recordAudit({ tenantId, actorId: user.id, actorEmail: reg.email, action: "register", metadata: { company: reg.companyName }, ip: ctx.req.ip });
+      return { ok: true };
+    }),
+
+  /** Resend a fresh OTP for an in-flight registration. */
+  resendOtp: publicProcedure
+    .input(z.object({ email: z.string().email() }))
+    .mutation(async ({ input }) => {
+      const refreshed = await refreshOtp(input.email);
+      if (!refreshed) {
+        throw new TRPCError({ code: "NOT_FOUND", message: "nothing to verify — start your registration again" });
+      }
+      const email = renderOtpEmail({ otp: refreshed.otp, companyName: refreshed.companyName });
+      await emailSender.send({ ...email, to: input.email });
       return { ok: true };
     }),
 

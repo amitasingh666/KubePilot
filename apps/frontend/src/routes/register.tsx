@@ -15,15 +15,27 @@ export function RegisterPage() {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [otp, setOtp] = useState("");
+  const [step, setStep] = useState<"details" | "otp">("details");
+  const [resent, setResent] = useState(false);
   const navigate = useNavigate();
   const { user, isLoading } = useAuth();
   const utils = trpc.useUtils();
+
   const register = trpc.auth.register.useMutation({
+    onSuccess: () => {
+      setOtp("");
+      setResent(false);
+      setStep("otp");
+    },
+  });
+  const verify = trpc.auth.verifyRegistration.useMutation({
     onSuccess: async () => {
       await utils.auth.me.invalidate();
       navigate("/app");
     },
   });
+  const resend = trpc.auth.resendOtp.useMutation({ onSuccess: () => setResent(true) });
 
   if (!isLoading && user) return <Navigate to="/app" replace />;
 
@@ -42,33 +54,84 @@ export function RegisterPage() {
             <Gauge size={24} />
           </span>
           <div>
-            <h1 className="text-2xl font-bold tracking-tight">Create your <span className="text-gradient">company</span></h1>
-            <p className="text-sm text-muted-foreground">You'll be the owner — invite your team afterward.</p>
+            {step === "details" ? (
+              <>
+                <h1 className="text-2xl font-bold tracking-tight">Create your <span className="text-gradient">company</span></h1>
+                <p className="text-sm text-muted-foreground">You'll be the owner — invite your team afterward.</p>
+              </>
+            ) : (
+              <>
+                <h1 className="text-2xl font-bold tracking-tight">Verify your <span className="text-gradient">email</span></h1>
+                <p className="text-sm text-muted-foreground">We sent a 6-digit code to {email}.</p>
+              </>
+            )}
           </div>
         </div>
 
         <Card>
           <CardContent className="p-6">
-            <form
-              onSubmit={(e: FormEvent) => { e.preventDefault(); register.mutate({ companyName, name, email, password }); }}
-              className="flex flex-col gap-3"
-            >
-              <label className="text-xs font-medium text-muted-foreground">Company name</label>
-              <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Inc" className={field} required />
-              <label className="text-xs font-medium text-muted-foreground">Your name</label>
-              <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className={field} required />
-              <label className="text-xs font-medium text-muted-foreground">Work email</label>
-              <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@acme.com" className={field} required />
-              <label className="text-xs font-medium text-muted-foreground">Password</label>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={field} minLength={8} required />
-              <Button type="submit" size="lg" disabled={register.isPending} className="mt-1">
-                {register.isPending ? "Creating…" : "Create company"}
-              </Button>
-              {register.error && <p className="text-sm text-destructive">{register.error.message}</p>}
-              <p className="mt-2 text-center text-sm text-muted-foreground">
-                Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link>
-              </p>
-            </form>
+            {step === "details" ? (
+              <form
+                onSubmit={(e: FormEvent) => { e.preventDefault(); register.mutate({ companyName, name, email, password }); }}
+                className="flex flex-col gap-3"
+              >
+                <label className="text-xs font-medium text-muted-foreground">Company name</label>
+                <input value={companyName} onChange={(e) => setCompanyName(e.target.value)} placeholder="Acme Inc" className={field} required />
+                <label className="text-xs font-medium text-muted-foreground">Your name</label>
+                <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Jane Doe" className={field} required />
+                <label className="text-xs font-medium text-muted-foreground">Work email</label>
+                <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} placeholder="you@acme.com" className={field} required />
+                <label className="text-xs font-medium text-muted-foreground">Password</label>
+                <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} placeholder="At least 8 characters" className={field} minLength={8} required />
+                <Button type="submit" size="lg" disabled={register.isPending} className="mt-1">
+                  {register.isPending ? "Sending code…" : "Continue"}
+                </Button>
+                {register.error && <p className="text-sm text-destructive">{register.error.message}</p>}
+                <p className="mt-2 text-center text-sm text-muted-foreground">
+                  Already have an account? <Link to="/login" className="text-primary hover:underline">Sign in</Link>
+                </p>
+              </form>
+            ) : (
+              <form
+                onSubmit={(e: FormEvent) => { e.preventDefault(); verify.mutate({ email, otp }); }}
+                className="flex flex-col gap-3"
+              >
+                <label className="text-xs font-medium text-muted-foreground">Verification code</label>
+                <input
+                  value={otp}
+                  onChange={(e) => setOtp(e.target.value.replace(/\D/g, "").slice(0, 6))}
+                  placeholder="123456"
+                  inputMode="numeric"
+                  autoComplete="one-time-code"
+                  className={`${field} text-center text-lg tracking-[0.5em]`}
+                  required
+                />
+                <Button type="submit" size="lg" disabled={verify.isPending || otp.length !== 6} className="mt-1">
+                  {verify.isPending ? "Verifying…" : "Verify & create company"}
+                </Button>
+                {verify.error && <p className="text-sm text-destructive">{verify.error.message}</p>}
+
+                <div className="mt-2 flex items-center justify-between text-sm">
+                  <button
+                    type="button"
+                    onClick={() => { setStep("details"); verify.reset(); }}
+                    className="text-muted-foreground hover:text-foreground"
+                  >
+                    ← Back
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => resend.mutate({ email })}
+                    disabled={resend.isPending}
+                    className="text-primary hover:underline disabled:opacity-50"
+                  >
+                    {resend.isPending ? "Sending…" : "Resend code"}
+                  </button>
+                </div>
+                {resent && <p className="text-center text-xs text-muted-foreground">A new code is on its way.</p>}
+                {resend.error && <p className="text-center text-sm text-destructive">{resend.error.message}</p>}
+              </form>
+            )}
           </CardContent>
         </Card>
       </motion.div>

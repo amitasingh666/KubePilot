@@ -74,6 +74,34 @@ export function renderInviteEmail(opts: {
   return { to: "", subject, html, text };
 }
 
+/** Render the registration verification-code email. */
+export function renderOtpEmail(opts: { otp: string; companyName: string }): Email {
+  const { otp, companyName } = opts;
+  const subject = `Your KubePilot verification code: ${otp}`;
+
+  const text = [
+    `Welcome to KubePilot!`,
+    ``,
+    `Your verification code for ${companyName} is:`,
+    ``,
+    `    ${otp}`,
+    ``,
+    `Enter it to finish creating your account. This code expires in 10 minutes.`,
+    `If you didn't request this, you can ignore this email.`,
+  ].join("\n");
+
+  const html = `
+    <div style="font-family:system-ui,-apple-system,Segoe UI,Roboto,sans-serif;max-width:480px;margin:0 auto;color:#111">
+      <h2 style="margin:0 0 12px">Verify your email</h2>
+      <p style="margin:0 0 16px;color:#444">Enter this code to finish creating <strong>${escapeHtml(companyName)}</strong> on KubePilot:</p>
+      <p style="margin:0 0 20px;font-size:32px;font-weight:700;letter-spacing:8px;color:#4f46e5">${escapeHtml(otp)}</p>
+      <p style="margin:0;color:#999;font-size:12px">This code expires in 10 minutes. If you didn't request this, you can ignore this email.</p>
+    </div>
+  `.trim();
+
+  return { to: "", subject, html, text };
+}
+
 function escapeHtml(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;");
 }
