@@ -24,17 +24,40 @@ function remove(item: Pending): void {
     if (i !== -1) buffer.splice(i, 1);
 }
 
-/** Collect a fresh inventory + usage snapshot pair. */
+/**
+ * Collect a fresh snapshot set. Inventory (from the K8s API) is the core signal
+ * and always required. Usage (from Prometheus/cAdvisor) is OPTIONAL enrichment —
+ * many clusters run no Prometheus, so a usage failure must not block the inventory
+ * push. We collect them independently and return whatever succeeded.
+ */
 async function collect(
     kc: KubeConfig,
     clusterId: string,
     agentVersion: string,
 ): Promise<Snapshot[]> {
-    const [inventory, usage] = await Promise.all([
+    const [inventory, usage] = await Promise.allSettled([
         collectInventorySnapshot(kc, clusterId, agentVersion),
         collectUsageSnapshot(kc, clusterId, agentVersion),
     ]);
-    return [inventory, usage].map(sanitizeSnapshot);
+
+    const snapshots: Snapshot[] = [];
+
+    if (inventory.status === "fulfilled") {
+        snapshots.push(inventory.value);
+    } else {
+        // Inventory is the essential signal — surface its failure loudly.
+        console.error("inventory collection failed:", inventory.reason);
+    }
+
+    if (usage.status === "fulfilled") {
+        snapshots.push(usage.value);
+    } else {
+        // Expected when the cluster has no Prometheus/cAdvisor. Skip, don't fail.
+        const msg = usage.reason instanceof Error ? usage.reason.message : String(usage.reason);
+        console.warn(`usage collection skipped (Prometheus not available): ${msg}`);
+    }
+
+    return snapshots.map(sanitizeSnapshot);
 }
 
 /** Try to deliver every buffered snapshot whose time has come. */
